@@ -17,8 +17,8 @@ from datetime import datetime
 from google import genai
 from dotenv import load_dotenv
 
-from backend.models.schemas import AIAnalysisResult, JobStatus
-from backend.services.job_manager import JobManager
+from ..models.schemas import AIAnalysisResult, JobStatus
+from .job_manager import JobManager
 
 # Load environment variables
 load_dotenv()

@@ -8,8 +8,8 @@ from fastapi import APIRouter, HTTPException, Depends
 from typing import Optional
 import logging
 
-from backend.models.schemas import RobotCommand, RobotStatus, RobotResponse, RobotAction
-from backend.services.robot_service import RobotService, get_robot_service
+from ..models.schemas import RobotCommand, RobotStatus, RobotResponse, RobotAction
+from ..services.robot_service import RobotService, get_robot_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/robot", tags=["Robot Control"])

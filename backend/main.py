@@ -18,16 +18,16 @@ from fastapi.middleware.gzip import GZipMiddleware
 import uvicorn
 
 # Import routes
-from backend.routes.robot_control import router as robot_router
-from backend.routes.ai_processing import router as ai_router
-from backend.routes.hand_processing import router as hand_router
+from .routes.robot_control import router as robot_router
+from .routes.ai_processing import router as ai_router
+from .routes.hand_processing import router as hand_router
 
 # Import models and services
-from backend.models.schemas import HealthCheck, APIError
-from backend.services.job_manager import get_job_manager
-from backend.services.robot_service import get_robot_service
-from backend.services.ai_service import get_ai_service
-from backend.services.hand_service import get_hand_service
+from .models.schemas import HealthCheck, APIError
+from .services.job_manager import get_job_manager
+from .services.robot_service import get_robot_service
+from .services.ai_service import get_ai_service
+from .services.hand_service import get_hand_service
 
 # Configure logging
 logging.basicConfig(

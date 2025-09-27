@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any
 from functools import lru_cache
 
-from backend.models.schemas import RobotStatus
+from ..models.schemas import RobotStatus
 
 # Import robot controller
 try:

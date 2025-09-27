@@ -10,12 +10,12 @@ from typing import List, Optional, Dict, Any
 import logging
 from pathlib import Path
 
-from backend.models.schemas import (
+from ..models.schemas import (
     ProcessingJob, ProcessingResponse, HandTrackingData, 
     TargetHand, ProcessingStats
 )
-from backend.services.hand_service import HandService, get_hand_service
-from backend.services.job_manager import JobManager, get_job_manager
+from ..services.hand_service import HandService, get_hand_service
+from ..services.job_manager import JobManager, get_job_manager
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/hand", tags=["Hand Processing"])

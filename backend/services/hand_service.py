@@ -13,9 +13,9 @@ from typing import Optional, Dict, Any, List
 from functools import lru_cache
 from datetime import datetime
 
-from backend.models.schemas import HandTrackingData, ProcessingStats, JobStatus, TargetHand
-from backend.services.job_manager import JobManager
-from backend.services.ai_service import AIService, get_ai_service
+from ..models.schemas import HandTrackingData, ProcessingStats, JobStatus, TargetHand
+from .job_manager import JobManager
+from .ai_service import AIService, get_ai_service
 
 # Import hand processors
 try:
