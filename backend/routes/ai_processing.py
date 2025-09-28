@@ -9,9 +9,9 @@ from typing import List, Optional
 import logging
 from pathlib import Path
 
-from ..models.schemas import ProcessingJob, AIAnalysisResult, ProcessingResponse
-from ..services.ai_service import AIService, get_ai_service
-from ..services.job_manager import JobManager, get_job_manager
+from models.schemas import ProcessingJob, AIAnalysisResult, ProcessingResponse
+from services.ai_service import AIService, get_ai_service
+from services.job_manager import JobManager, get_job_manager
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ai", tags=["AI Processing"])

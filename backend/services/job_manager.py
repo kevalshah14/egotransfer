@@ -13,7 +13,7 @@ from threading import Lock
 import logging
 
 from functools import lru_cache
-from ..models.schemas import ProcessingJob, JobStatus
+from models.schemas import ProcessingJob, JobStatus
 
 logger = logging.getLogger(__name__)
 

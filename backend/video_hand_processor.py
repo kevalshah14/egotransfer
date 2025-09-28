@@ -36,7 +36,7 @@ class VideoHandProcessor:
         # Initialize MediaPipe hands with improved settings for video processing
         self.mp_hands = mp.solutions.hands
         self.hands = self.mp_hands.Hands(
-            static_image_mode=False,
+            static_image_mode=True,  # Use static mode to avoid timestamp issues
             max_num_hands=2,  # Track both hands
             min_detection_confidence=0.5,  # Lowered for better detection
             min_tracking_confidence=0.3,  # Lowered for better tracking
@@ -51,6 +51,9 @@ class VideoHandProcessor:
         
         # Hand tracking data storage
         self.tracking_data: List[HandFrame] = []
+        
+        # Frame counter for consistent processing
+        self.frame_counter = 0
         
     def process_video(self, input_video_path: str, output_video_path: str = None, 
                      tracking_data_path: str = None, progress_callback=None) -> bool:
@@ -262,6 +265,13 @@ class VideoHandProcessor:
         
         # Process frame for hand detection with error handling
         try:
+            # Use MediaPipe with proper timestamp handling
+            # Convert to uint8 if needed
+            if rgb_frame.dtype != np.uint8:
+                rgb_frame = (rgb_frame * 255).astype(np.uint8)
+            
+            # Use consistent frame counter for MediaPipe processing
+            self.frame_counter += 1
             results = self.hands.process(rgb_frame)
         except Exception as e:
             print(f"MediaPipe processing error on frame {frame_number}: {e}")

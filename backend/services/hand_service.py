@@ -13,7 +13,7 @@ from typing import Optional, Dict, Any, List
 from functools import lru_cache
 from datetime import datetime
 
-from ..models.schemas import HandTrackingData, ProcessingStats, JobStatus, TargetHand
+from models.schemas import HandTrackingData, ProcessingStats, JobStatus, TargetHand
 from .job_manager import JobManager
 from .ai_service import AIService, get_ai_service
 
