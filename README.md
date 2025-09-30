@@ -1,4 +1,4 @@
-# DobotControl - Video-to-Robot Motion Copying System
+# Video-to-Robot Motion Copying System
 
 A comprehensive Python application that enables both real-time hand gesture control and video-based motion copying for Dobot robotic arms using computer vision, MediaPipe hand tracking, and AI analysis.
 
