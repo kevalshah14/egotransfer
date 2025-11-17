@@ -4,7 +4,7 @@ Hand Processing Routes
 Production-level FastAPI routes for hand tracking and processing operations.
 """
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks, UploadFile, File, Form, Query, Depends
+from fastapi import APIRouter, HTTPException, BackgroundTasks, UploadFile, File, Form, Query, Depends, Request
 from fastapi.responses import FileResponse
 from typing import List, Optional, Dict, Any
 import logging
@@ -16,6 +16,7 @@ from models.schemas import (
 )
 from services.hand_service import HandService, get_hand_service
 from services.job_manager import JobManager, get_job_manager
+from routes.auth import get_current_user_optional
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/hand", tags=["Hand Processing"])
@@ -24,6 +25,7 @@ router = APIRouter(prefix="/hand", tags=["Hand Processing"])
 @router.post("/process", response_model=ProcessingResponse)
 async def process_video_hand_tracking(
     background_tasks: BackgroundTasks,
+    request: Request,
     file: UploadFile = File(...),
     target_hand: TargetHand = Form(TargetHand.RIGHT),
     confidence_threshold: float = Form(0.7, ge=0.1, le=1.0),
@@ -54,6 +56,10 @@ async def process_video_hand_tracking(
     - **analysis_detail_level**: Level of analysis detail (basic/standard/detailed)
     """
     try:
+        # Get current user
+        current_user = await get_current_user_optional(request)
+        user_id = current_user["id"] if current_user else None
+        
         # Validate file type
         allowed_extensions = {'.mp4', '.avi', '.mov', '.mkv'}
         file_extension = Path(file.filename).suffix.lower()
@@ -64,9 +70,10 @@ async def process_video_hand_tracking(
                 detail=f"Invalid file type. Allowed: {', '.join(allowed_extensions)}"
             )
         
-        # Create processing job
+        # Create processing job with user_id
         job_id = job_manager.create_job(
             video_name=file.filename,
+            user_id=user_id,
             message="Hand processing queued",
             current_step="Initializing"
         )
@@ -277,6 +284,7 @@ async def download_robot_commands(
 async def reprocess_video(
     job_id: str,
     background_tasks: BackgroundTasks,
+    request: Request,
     target_hand: Optional[TargetHand] = Form(None),
     confidence_threshold: Optional[float] = Form(None, ge=0.1, le=1.0),
     hand_service: HandService = Depends(get_hand_service),
@@ -284,13 +292,22 @@ async def reprocess_video(
 ):
     """Reprocess an existing video with different parameters."""
     try:
+        # Get current user
+        current_user = await get_current_user_optional(request)
+        user_id = current_user["id"] if current_user else None
+        
         job = job_manager.get_job(job_id)
         if not job:
             raise HTTPException(status_code=404, detail="Job not found")
         
-        # Create new job for reprocessing
+        # Check if user has access to this job
+        if job.user_id and job.user_id != user_id:
+            raise HTTPException(status_code=403, detail="Access denied to this job")
+        
+        # Create new job for reprocessing with same user_id
         new_job_id = job_manager.create_job(
             video_name=f"reprocess_{job.video_name}",
+            user_id=user_id,
             message="Reprocessing queued",
             current_step="Initializing"
         )

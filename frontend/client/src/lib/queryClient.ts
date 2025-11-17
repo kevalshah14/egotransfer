@@ -12,9 +12,18 @@ export async function apiRequest(
   url: string,
   data?: unknown | undefined,
 ): Promise<Response> {
-  const res = await fetch(url, {
+  // Get session from localStorage if available
+  const session = localStorage.getItem("auth_session");
+  const headers: Record<string, string> = data ? { "Content-Type": "application/json" } : {};
+  
+  // Add session as query parameter for backend compatibility
+  const urlWithSession = session ? 
+    (url.includes('?') ? `${url}&session=${session}` : `${url}?session=${session}`) : 
+    url;
+  
+  const res = await fetch(urlWithSession, {
     method,
-    headers: data ? { "Content-Type": "application/json" } : {},
+    headers,
     body: data ? JSON.stringify(data) : undefined,
     credentials: "include",
   });
@@ -29,7 +38,16 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
-    const res = await fetch(queryKey.join("/") as string, {
+    // Get session from localStorage if available
+    const session = localStorage.getItem("auth_session");
+    let url = queryKey.join("/") as string;
+    
+    // Add session as query parameter for backend compatibility
+    if (session) {
+      url = url.includes('?') ? `${url}&session=${session}` : `${url}?session=${session}`;
+    }
+    
+    const res = await fetch(url, {
       credentials: "include",
     });
 

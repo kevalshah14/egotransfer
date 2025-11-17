@@ -34,8 +34,7 @@ export default defineConfig({
       // Proxy API calls to Python backend
       '/api': {
         target: 'http://localhost:8000',
-        changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, '')
+        changeOrigin: true
       },
       // Proxy all other backend routes
       '/hand': {

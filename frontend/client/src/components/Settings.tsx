@@ -103,7 +103,9 @@ export default function Settings({ onViewJob }: SettingsProps) {
   // Delete job mutation
   const deleteJobMutation = useMutation({
     mutationFn: async (jobId: string) => {
-      const response = await fetch(`/jobs/${jobId}`, {
+      const session = localStorage.getItem("auth_session");
+      const url = session ? `/jobs/${jobId}?session=${session}` : `/jobs/${jobId}`;
+      const response = await fetch(url, {
         method: 'DELETE',
       });
       if (!response.ok) {
@@ -126,7 +128,9 @@ export default function Settings({ onViewJob }: SettingsProps) {
   // Clear all jobs mutation
   const clearAllMutation = useMutation({
     mutationFn: async () => {
-      const response = await fetch('/jobs', {
+      const session = localStorage.getItem("auth_session");
+      const url = session ? `/jobs?session=${session}` : '/jobs';
+      const response = await fetch(url, {
         method: 'DELETE',
       });
       if (!response.ok) {
@@ -149,16 +153,18 @@ export default function Settings({ onViewJob }: SettingsProps) {
   // Download functions
   const downloadProcessedVideo = async (jobId: string) => {
     try {
-      const response = await fetch(`/hand/video/${jobId}`);
+      const session = localStorage.getItem("auth_session");
+      const url = session ? `/hand/video/${jobId}?session=${session}` : `/hand/video/${jobId}`;
+      const response = await fetch(url);
       if (response.ok) {
         const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
+        const downloadUrl = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = url;
+        a.href = downloadUrl;
         a.download = `processed_video_${jobId}.mp4`;
         document.body.appendChild(a);
         a.click();
-        window.URL.revokeObjectURL(url);
+        window.URL.revokeObjectURL(downloadUrl);
         document.body.removeChild(a);
         toast({ title: "Video downloaded successfully" });
       } else {
@@ -175,16 +181,18 @@ export default function Settings({ onViewJob }: SettingsProps) {
 
   const downloadRobotCommands = async (jobId: string) => {
     try {
-      const response = await fetch(`/hand/commands/${jobId}`);
+      const session = localStorage.getItem("auth_session");
+      const url = session ? `/hand/commands/${jobId}?session=${session}` : `/hand/commands/${jobId}`;
+      const response = await fetch(url);
       if (response.ok) {
         const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
+        const downloadUrl = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = url;
+        a.href = downloadUrl;
         a.download = `robot_commands_${jobId}.json`;
         document.body.appendChild(a);
         a.click();
-        window.URL.revokeObjectURL(url);
+        window.URL.revokeObjectURL(downloadUrl);
         document.body.removeChild(a);
         toast({ title: "Robot commands downloaded successfully" });
       } else {

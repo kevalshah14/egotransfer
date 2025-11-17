@@ -81,13 +81,16 @@ class JobManager:
         logger.info(f"Deleted job {job_id}")
         return True
     
-    def list_jobs(self, status: Optional[JobStatus] = None) -> List[ProcessingJob]:
-        """List all jobs, optionally filtered by status."""
+    def list_jobs(self, status: Optional[JobStatus] = None, user_id: Optional[str] = None) -> List[ProcessingJob]:
+        """List all jobs, optionally filtered by status and user_id."""
         with self._lock:
             jobs = list(self._jobs.values())
             
         if status:
             jobs = [job for job in jobs if job.status == status]
+        
+        if user_id is not None:
+            jobs = [job for job in jobs if job.user_id == user_id]
             
         # Sort by creation time, newest first
         return sorted(jobs, key=lambda x: x.created_at, reverse=True)

@@ -629,6 +629,35 @@
     }
   }
 
+  /* Animated floating orbs for auth screen */
+  .animate-float {
+    animation: floatOrb 8s ease-in-out infinite;
+  }
+
+  .animate-float-delayed {
+    animation: floatOrb 10s ease-in-out infinite;
+    animation-delay: 2s;
+  }
+
+  @keyframes floatOrb {
+    0%, 100% {
+      transform: translate(0, 0) scale(1);
+      opacity: 0.6;
+    }
+    25% {
+      transform: translate(30px, -30px) scale(1.1);
+      opacity: 0.8;
+    }
+    50% {
+      transform: translate(-20px, 20px) scale(0.95);
+      opacity: 0.7;
+    }
+    75% {
+      transform: translate(20px, 30px) scale(1.05);
+      opacity: 0.75;
+    }
+  }
+
   /* Ultra-minimalist scrollbars */
   .glass-scroll::-webkit-scrollbar {
     width: 4px;

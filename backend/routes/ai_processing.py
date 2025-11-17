@@ -4,7 +4,7 @@ AI Processing Routes
 Production-level FastAPI routes for AI video analysis operations.
 """
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks, UploadFile, File, Form, Depends
+from fastapi import APIRouter, HTTPException, BackgroundTasks, UploadFile, File, Form, Depends, Request
 from typing import List, Optional
 import logging
 from pathlib import Path
@@ -12,6 +12,7 @@ from pathlib import Path
 from models.schemas import ProcessingJob, AIAnalysisResult, ProcessingResponse
 from services.ai_service import AIService, get_ai_service
 from services.job_manager import JobManager, get_job_manager
+from routes.auth import get_current_user_optional
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ai", tags=["AI Processing"])
@@ -21,6 +22,7 @@ router = APIRouter(prefix="/ai", tags=["AI Processing"])
 async def analyze_existing_video(
     job_id: str,
     background_tasks: BackgroundTasks,
+    request: Request,
     include_task_analysis: bool = Form(True),
     include_movement_analysis: bool = Form(True),
     analysis_detail_level: str = Form("standard"),
@@ -29,19 +31,28 @@ async def analyze_existing_video(
 ):
     """Analyze an existing processed video with AI."""
     try:
+        # Get current user
+        current_user = await get_current_user_optional(request)
+        user_id = current_user["id"] if current_user else None
+        
         # Get the existing job
         job = job_manager.get_job(job_id)
         if not job:
             raise HTTPException(status_code=404, detail="Job not found")
+        
+        # Check if user has access to this job
+        if job.user_id and job.user_id != user_id:
+            raise HTTPException(status_code=403, detail="Access denied to this job")
         
         # Find the original video file
         original_video_path = Path(f"uploads/{job_id}_{job.video_name}")
         if not original_video_path.exists():
             raise HTTPException(status_code=404, detail="Original video file not found")
         
-        # Create new AI analysis job
+        # Create new AI analysis job with same user_id
         ai_job_id = job_manager.create_job(
             video_name=f"ai_analysis_{job.video_name}",
+            user_id=user_id,
             message="AI analysis queued for existing video",
             current_step="Initializing"
         )
@@ -73,6 +84,7 @@ async def analyze_existing_video(
 @router.post("/analyze", response_model=ProcessingResponse)
 async def analyze_video_with_ai(
     background_tasks: BackgroundTasks,
+    request: Request,
     file: UploadFile = File(...),
     include_task_analysis: bool = Form(True),
     include_movement_analysis: bool = Form(True),
@@ -89,6 +101,10 @@ async def analyze_video_with_ai(
     - **analysis_detail_level**: Level of analysis detail (basic/standard/detailed)
     """
     try:
+        # Get current user
+        current_user = await get_current_user_optional(request)
+        user_id = current_user["id"] if current_user else None
+        
         # Validate file type
         allowed_extensions = {'.mp4', '.avi', '.mov', '.mkv'}
         file_extension = Path(file.filename).suffix.lower()
@@ -99,9 +115,10 @@ async def analyze_video_with_ai(
                 detail=f"Invalid file type. Allowed: {', '.join(allowed_extensions)}"
             )
         
-        # Create processing job
+        # Create processing job with user_id
         job_id = job_manager.create_job(
             video_name=file.filename,
+            user_id=user_id,
             message="AI analysis queued",
             current_step="Initializing"
         )
@@ -141,31 +158,43 @@ async def analyze_video_with_ai(
 @router.get("/analysis/{job_id}", response_model=AIAnalysisResult)
 async def get_analysis_result(
     job_id: str,
+    request: Request,
     ai_service: AIService = Depends(get_ai_service),
     job_manager: JobManager = Depends(get_job_manager)
 ):
     """Get AI analysis results for a specific job."""
     try:
+        # Get current user
+        current_user = await get_current_user_optional(request)
+        user_id = current_user["id"] if current_user else None
+        
         job = job_manager.get_job(job_id)
         if not job:
             raise HTTPException(status_code=404, detail="Job not found")
         
+        # Check if user has access to this job
+        if job.user_id and job.user_id != user_id:
+            raise HTTPException(status_code=403, detail="Access denied to this job")
+        
         if job.status != "completed":
             raise HTTPException(
                 status_code=400,
-                detail=f"Analysis not completed. Current status: {job.status}"
+                detail=f"Job not completed. Current status: {job.status}"
             )
         
         # Get analysis results
         analysis = await ai_service.get_analysis_result(job_id)
         if not analysis:
-            raise HTTPException(status_code=404, detail="Analysis results not found")
+            raise HTTPException(status_code=404, detail="AI analysis results not available. Hand tracking completed successfully, but AI analysis may have failed.")
         
         return analysis
         
+    except HTTPException:
+        # Re-raise HTTP exceptions (404, 403, 400) without wrapping them
+        raise
     except Exception as e:
-        logger.error(f"Failed to get analysis result for job {job_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Unexpected error getting analysis result for job {job_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
 @router.get("/models")
@@ -186,19 +215,29 @@ async def get_available_ai_models(ai_service: AIService = Depends(get_ai_service
 async def reanalyze_video(
     job_id: str,
     background_tasks: BackgroundTasks,
+    request: Request,
     analysis_detail_level: str = Form("standard"),
     ai_service: AIService = Depends(get_ai_service),
     job_manager: JobManager = Depends(get_job_manager)
 ):
     """Re-analyze an existing video with different parameters."""
     try:
+        # Get current user
+        current_user = await get_current_user_optional(request)
+        user_id = current_user["id"] if current_user else None
+        
         job = job_manager.get_job(job_id)
         if not job:
             raise HTTPException(status_code=404, detail="Job not found")
         
-        # Create new job for re-analysis
+        # Check if user has access to this job
+        if job.user_id and job.user_id != user_id:
+            raise HTTPException(status_code=403, detail="Access denied to this job")
+        
+        # Create new job for re-analysis with same user_id
         new_job_id = job_manager.create_job(
             video_name=f"reanalysis_{job.video_name}",
+            user_id=user_id,
             message="Re-analysis queued",
             current_step="Initializing"
         )

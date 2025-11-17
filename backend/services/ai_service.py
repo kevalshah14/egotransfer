@@ -42,18 +42,11 @@ class AIService:
     """Service for managing AI video analysis operations."""
     
     def __init__(self):
-        """Initialize AI service."""
+        """Initialize AI service with lazy client initialization."""
         self.genai_available = GENAI_AVAILABLE
         self.model = None
-        
-        if self.genai_available:
-            try:
-                # Initialize the genai client
-                self.client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-                logging.info("✅ Google GenAI client initialized successfully")
-            except Exception as e:
-                logging.error(f"Failed to initialize GenAI client: {e}")
-                self.genai_available = False
+        self._client = None
+        self._client_initialized = False
         
         self.analysis_cache: Dict[str, AIAnalysisResult] = {}
         self.usage_stats = {
@@ -62,6 +55,20 @@ class AIService:
             "failed_analyses": 0,
             "total_processing_time": 0.0
         }
+    
+    @property
+    def client(self):
+        """Lazy initialization of GenAI client only when needed."""
+        if not self._client_initialized and self.genai_available:
+            self._client_initialized = True
+            try:
+                self._client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+                logging.info("✅ Google GenAI client initialized successfully")
+            except Exception as e:
+                logging.error(f"Failed to initialize GenAI client: {e}")
+                self.genai_available = False
+                self._client = None
+        return self._client
     
     async def analyze_video_background(
         self,
@@ -72,22 +79,14 @@ class AIService:
         detail_level: str = "standard",
         job_manager: JobManager = None
     ):
-        """Background task for AI video analysis."""
+        """Background task for AI video analysis (runs in parallel with hand tracking)."""
         start_time = datetime.now()
         
         try:
             if not self.genai_available or not hasattr(self, 'client'):
                 raise Exception("Google GenAI not available")
             
-            # Update job status
-            if job_manager:
-                job_manager.update_job(
-                    job_id,
-                    status=JobStatus.PROCESSING,
-                    progress=70,
-                    current_step="AI Analysis",
-                    message="Starting AI analysis..."
-                )
+            logger.info(f"Starting AI analysis for job {job_id}")
             
             # Upload and analyze video with GenAI
             analysis_text = await self._analyze_video_with_genai(video_path)
@@ -95,14 +94,7 @@ class AIService:
             if not analysis_text:
                 raise Exception("AI analysis returned empty result")
             
-            # Update progress
-            if job_manager:
-                job_manager.update_job(
-                    job_id,
-                    progress=90,
-                    current_step="Processing Results",
-                    message="Processing AI analysis results..."
-                )
+            logger.info(f"Received AI analysis for job {job_id}, parsing results...")
             
             # Parse and structure the analysis
             analysis_result = await self._parse_analysis_result(
@@ -119,19 +111,19 @@ class AIService:
             # Cache the result
             self.analysis_cache[job_id] = analysis_result
             
-            # Update job completion
+            # Update processed files (don't change job status - hand service will do that)
             if job_manager:
-                processed_files = job_manager.get_job(job_id).processed_files
-                processed_files['ai_analysis'] = f"{job_id}_ai_analysis.json"
-                
-                job_manager.update_job(
-                    job_id,
-                    status=JobStatus.COMPLETED,
-                    progress=100,
-                    current_step="Complete",
-                    message="AI analysis completed successfully",
-                    processed_files=processed_files
-                )
+                job = job_manager.get_job(job_id)
+                if job:
+                    processed_files = job.processed_files.copy() if job.processed_files else {}
+                    processed_files['ai_analysis'] = f"{job_id}_ai_analysis.json"
+                    
+                    # Only update processed_files, not status or progress
+                    # Hand service will handle final status update
+                    job_manager.update_job(
+                        job_id,
+                        processed_files=processed_files
+                    )
             
             # Update usage stats
             processing_time = (datetime.now() - start_time).total_seconds()
@@ -145,19 +137,16 @@ class AIService:
             error_msg = f"AI analysis failed: {str(e)}"
             logger.error(f"Job {job_id}: {error_msg}")
             
-            if job_manager:
-                job_manager.update_job(
-                    job_id,
-                    status=JobStatus.FAILED,
-                    progress=0,
-                    current_step="Error",
-                    message=error_msg,
-                    error=str(e)
-                )
+            # Don't fail the entire job - just log the error
+            # Hand service will handle job completion
+            logger.warning(f"AI analysis failed but hand processing may continue for job {job_id}")
             
             # Update usage stats
             self.usage_stats["total_analyses"] += 1
             self.usage_stats["failed_analyses"] += 1
+            
+            # Re-raise the exception so the hand service knows AI failed
+            raise
     
     async def _analyze_video_with_genai(self, video_path: Path) -> str:
         """Analyze video using Google GenAI."""
@@ -729,16 +718,18 @@ class AIService:
         return stats
 
 
-# Dependency injection
+# Dependency injection with proper singleton
 _ai_service: Optional[AIService] = None
+_ai_service_initialized = False
 
 
 @lru_cache()
 def get_ai_service() -> AIService:
-    """Get AI service instance (singleton)."""
-    global _ai_service
+    """Get AI service instance (singleton with lazy initialization)."""
+    global _ai_service, _ai_service_initialized
     if _ai_service is None:
         _ai_service = AIService()
+        _ai_service_initialized = True
     return _ai_service
 
 

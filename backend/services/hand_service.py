@@ -79,6 +79,7 @@ class HandService:
     ):
         """Background task for hand tracking processing."""
         start_time = datetime.now()
+        ai_task = None
         
         try:
             processor = self._get_processor()
@@ -91,9 +92,28 @@ class HandService:
                     job_id,
                     status=JobStatus.PROCESSING,
                     progress=10,
-                    current_step="Hand Tracking",
-                    message="Starting hand tracking analysis..."
+                    current_step="Processing",
+                    message="Starting hand tracking and AI analysis in parallel..."
                 )
+            
+            # Start AI analysis in parallel if requested
+            if include_ai_analysis:
+                try:
+                    ai_service = AIService()
+                    ai_task = asyncio.create_task(
+                        ai_service.analyze_video_background(
+                            job_id=job_id,
+                            video_path=video_path,
+                            include_task_analysis=include_task_analysis,
+                            include_movement_analysis=include_movement_analysis,
+                            detail_level=analysis_detail_level,
+                            job_manager=job_manager
+                        )
+                    )
+                    logger.info(f"Started AI analysis task in parallel for job {job_id}")
+                except Exception as ai_error:
+                    logger.error(f"Failed to start AI analysis task for job {job_id}: {ai_error}")
+                    ai_task = None
             
             # Configure processor
             processor.hands = processor.mp_hands.Hands(
@@ -180,24 +200,33 @@ class HandService:
                     job_id,
                     progress=70,
                     current_step="Hand Processing Complete",
-                    message=f"Hand processing completed successfully. Generated {len(processed_files)} files.",
+                    message=f"Hand processing completed. Generated {len(processed_files)} files. Waiting for AI analysis...",
                     processed_files=processed_files
                 )
                 
-                # Start AI analysis in parallel if requested
-                if include_ai_analysis:
+                # Wait for AI analysis to complete if it was started
+                if ai_task:
                     try:
-                        ai_service = AIService()
-                        await ai_service.analyze_video_background(
-                            job_id=job_id,
-                            video_path=video_path,
-                            include_task_analysis=include_task_analysis,
-                            include_movement_analysis=include_movement_analysis,
-                            detail_level=analysis_detail_level,
-                            job_manager=job_manager
+                        logger.info(f"Waiting for AI analysis to complete for job {job_id}")
+                        await ai_task
+                        logger.info(f"AI analysis completed successfully for job {job_id}")
+                        
+                        # Both processes completed successfully
+                        # Get updated processed_files (AI service added its file)
+                        updated_job = job_manager.get_job(job_id)
+                        if updated_job:
+                            processed_files = updated_job.processed_files
+                        
+                        job_manager.update_job(
+                            job_id,
+                            status=JobStatus.COMPLETED,
+                            progress=100,
+                            current_step="Complete",
+                            message=f"Processing completed successfully! Generated {len(processed_files)} files (hand tracking + AI analysis).",
+                            processed_files=processed_files
                         )
                     except Exception as ai_error:
-                        logger.error(f"Failed to start AI analysis for job {job_id}: {ai_error}")
+                        logger.error(f"AI analysis failed for job {job_id}: {ai_error}")
                         # Continue without AI analysis
                         job_manager.update_job(
                             job_id,
@@ -224,6 +253,15 @@ class HandService:
         except Exception as e:
             error_msg = f"Hand processing failed: {str(e)}"
             logger.error(f"Job {job_id}: {error_msg}")
+            
+            # Cancel AI task if it's still running
+            if ai_task and not ai_task.done():
+                logger.info(f"Cancelling AI analysis task for job {job_id} due to hand processing failure")
+                ai_task.cancel()
+                try:
+                    await ai_task
+                except asyncio.CancelledError:
+                    pass
             
             if job_manager:
                 job_manager.update_job(

@@ -48,6 +48,7 @@ class ProcessingRequest(BaseModel):
 class ProcessingJob(BaseModel):
     """Model for processing job data."""
     job_id: str = Field(..., description="Unique job identifier")
+    user_id: Optional[str] = Field(None, description="User ID who created the job")
     status: JobStatus = Field(JobStatus.PENDING, description="Current job status")
     progress: int = Field(0, ge=0, le=100, description="Progress percentage")
     message: str = Field("", description="Status message")

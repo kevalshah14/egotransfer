@@ -4,15 +4,17 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { AuthProvider } from "@/lib/auth";
+import { AuthGuard } from "@/components/Auth";
 import NotFound from "@/pages/not-found";
 import VideoUpload from "@/components/VideoUpload";
 import DetailedVideoAnalysis from "@/components/DetailedVideoAnalysis";
-import RobotControl from "@/components/RobotControl";
+// import RobotControl from "@/components/RobotControl"; // Hidden for now
 import Settings from "@/components/Settings";
 import Navigation from "@/components/Navigation";
 
 function VideoProcessingApp() {
-  const [currentPage, setCurrentPage] = useState<'upload' | 'analysis' | 'robot' | 'settings'>('upload');
+  const [currentPage, setCurrentPage] = useState<'upload' | 'analysis' | 'robot' | 'settings'>('upload'); // robot type kept for compatibility but page is hidden
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [uploadedVideo, setUploadedVideo] = useState<File | null>(null);
@@ -21,6 +23,10 @@ function VideoProcessingApp() {
   const [annotations, setAnnotations] = useState<any[]>([]);
 
   const navigateWithTransition = (newPage: 'upload' | 'analysis' | 'robot' | 'settings') => {
+    // Prevent navigation to robot page (hidden for now)
+    if (newPage === 'robot') {
+      return;
+    }
     // Prevent navigation during processing except to settings
     if (isProcessing && newPage !== 'settings') {
       return;
@@ -73,15 +79,19 @@ function VideoProcessingApp() {
     console.log('App: handleViewJob called with jobId:', jobId);
     
     try {
+      // Get session for authenticated requests
+      const session = localStorage.getItem("auth_session");
+      const sessionParam = session ? `?session=${session}` : '';
+      
       // Fetch job data
-      const jobResponse = await fetch(`/jobs/${jobId}`);
+      const jobResponse = await fetch(`/jobs/${jobId}${sessionParam}`);
       if (!jobResponse.ok) {
         throw new Error('Failed to fetch job data');
       }
       const jobData = await jobResponse.json();
       
       // Fetch analysis data
-      const analysisResponse = await fetch(`/ai/analysis/${jobId}`);
+      const analysisResponse = await fetch(`/ai/analysis/${jobId}${sessionParam}`);
       if (!analysisResponse.ok) {
         throw new Error('Failed to fetch analysis data');
       }
@@ -113,16 +123,17 @@ function VideoProcessingApp() {
   };
 
   const handleTransferToRobot = () => {
+    // Robot control page is hidden for now
+    console.log('Robot control page is currently unavailable');
     // Extract robot commands from analysis data if available
-    if (analysisData?.handJobId) {
-      // Pass the job ID so RobotControl can load the robot commands
-      setAnnotations([{
-        handJobId: analysisData.handJobId,
-        robotCommandsUrl: analysisData.robotCommands
-      }]);
-    }
-    navigateWithTransition('robot');
-    console.log('Transferring to robot, navigating to robot control');
+    // if (analysisData?.handJobId) {
+    //   // Pass the job ID so RobotControl can load the robot commands
+    //   setAnnotations([{
+    //     handJobId: analysisData.handJobId,
+    //     robotCommandsUrl: analysisData.robotCommands
+    //   }]);
+    // }
+    // navigateWithTransition('robot');
   };
 
   const renderCurrentPage = () => {
@@ -150,7 +161,8 @@ function VideoProcessingApp() {
           </div>
         );
       case 'robot':
-        return <RobotControl annotations={annotations} />;
+        // Robot control page hidden for now
+        return <div className="min-h-screen flex items-center justify-center bg-black text-white">Robot Control page is currently unavailable</div>;
       case 'settings':
         return <Settings onViewJob={handleViewJob} />;
       default:
@@ -174,22 +186,26 @@ function VideoProcessingApp() {
 
 function Router() {
   return (
-    <Switch>
-      <Route path="/" component={VideoProcessingApp} />
-      <Route component={NotFound} />
-    </Switch>
+    <AuthGuard>
+      <Switch>
+        <Route path="/" component={VideoProcessingApp} />
+        <Route component={NotFound} />
+      </Switch>
+    </AuthGuard>
   );
 }
 
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <div className="dark min-h-screen">
-          <Router />
-          <Toaster />
-        </div>
-      </TooltipProvider>
+      <AuthProvider>
+        <TooltipProvider>
+          <div className="dark min-h-screen">
+            <Router />
+            <Toaster />
+          </div>
+        </TooltipProvider>
+      </AuthProvider>
     </QueryClientProvider>
   );
 }

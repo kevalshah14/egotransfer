@@ -46,6 +46,7 @@ export default function VideoUpload({ onVideoUpload, onProcessingStart, onProces
   const [progressPercentage, setProgressPercentage] = useState(0);
   const [currentStep, setCurrentStep] = useState('');
   const [eta, setEta] = useState('');
+  const [isReadyToAnalyze, setIsReadyToAnalyze] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -89,7 +90,11 @@ export default function VideoUpload({ onVideoUpload, onProcessingStart, onProces
       formData.append('generate_video', 'true');
       formData.append('generate_robot_commands', 'true');
 
-      const response = await fetch('/hand/process', {
+      // Get session from localStorage if available
+      const session = localStorage.getItem("auth_session");
+      const url = session ? `/hand/process?session=${session}` : '/hand/process';
+
+      const response = await fetch(url, {
         method: 'POST',
         body: formData,
       });
@@ -112,7 +117,10 @@ export default function VideoUpload({ onVideoUpload, onProcessingStart, onProces
       // Poll for hand processing completion (with small delay to avoid race condition)
       const pollForHandResults = async (): Promise<void> => {
         try {
-          const response = await fetch(`/jobs/${handJobId}`);
+          // Include session in status check
+          const session = localStorage.getItem("auth_session");
+          const statusUrl = session ? `/jobs/${handJobId}?session=${session}` : `/jobs/${handJobId}`;
+          const response = await fetch(statusUrl);
           
           if (response.ok) {
             const jobStatus: JobStatus = await response.json();
@@ -122,39 +130,51 @@ export default function VideoUpload({ onVideoUpload, onProcessingStart, onProces
               setProgressPercentage(100);
               setEta('');
               
-              // Get final results
-              const analysisResponse = await fetch(`/ai/analysis/${handJobId}`);
+              // Try to get AI analysis results (may not exist if AI analysis failed)
+              const analysisUrl = session ? `/ai/analysis/${handJobId}?session=${session}` : `/ai/analysis/${handJobId}`;
+              const analysisResponse = await fetch(analysisUrl);
+              
+              let analysisData: AnalysisResult | null = null;
               if (analysisResponse.ok) {
-                const analysisData: AnalysisResult = await analysisResponse.json();
-                
-                // Combine job data with analysis
-                const combinedData = {
-                  handJobId,
-                  aiJobId: handJobId, // Same job ID since AI analysis is now integrated
-                  handProcessing: jobStatus,
-                  aiAnalysis: analysisData,
-                  processedVideoUrl: `/hand/video/${handJobId}`,
-                  trackingData: `/hand/tracking/${handJobId}`,
-                  robotCommands: `/hand/commands/${handJobId}`,
-                };
-                
-                console.log('Combined data for analysis:', combinedData);
-                
-                setTimeout(() => {
-                  setIsUploading(false);
-                  setIsProcessing(false);
-                  setAnalysisProgress('');
-                  setProgressPercentage(0);
-                  setCurrentStep('');
-                  setEta('');
-                  onProcessingComplete?.();
-                }, 1000);
-                onVideoUpload?.(uploadedFile!, combinedData);
-                console.log('Video uploaded, hand processed, and analyzed:', uploadedFile!.name);
+                try {
+                  analysisData = await analysisResponse.json();
+                  console.log('AI analysis results retrieved successfully');
+                } catch (e) {
+                  console.warn('Failed to parse AI analysis results:', e);
+                }
               } else {
-                console.error('Failed to get analysis results:', analysisResponse.status, analysisResponse.statusText);
-                throw new Error('Failed to get analysis results');
+                console.warn('AI analysis not available (this is ok if AI failed):', analysisResponse.status);
               }
+              
+              // Combine job data with analysis (analysis may be null if AI failed)
+              const combinedData = {
+                handJobId,
+                aiJobId: handJobId,
+                handProcessing: jobStatus,
+                aiAnalysis: analysisData || {
+                  task_description: 'AI analysis unavailable',
+                  timeline: [],
+                  robot_notes: 'Hand tracking completed successfully, but AI analysis failed or is unavailable.',
+                  confidence: 0
+                },
+                processedVideoUrl: `/hand/video/${handJobId}`,
+                trackingData: `/hand/tracking/${handJobId}`,
+                robotCommands: `/hand/commands/${handJobId}`,
+              };
+              
+              console.log('Combined data for analysis:', combinedData);
+              
+              setTimeout(() => {
+                setIsUploading(false);
+                setIsProcessing(false);
+                setAnalysisProgress('');
+                setProgressPercentage(0);
+                setCurrentStep('');
+                setEta('');
+                onProcessingComplete?.();
+              }, 1000);
+              onVideoUpload?.(uploadedFile!, combinedData);
+              console.log('Video uploaded and processed:', uploadedFile!.name);
             } else if (jobStatus.status === 'error') {
               throw new Error(jobStatus.error || 'Hand processing failed');
             } else {
@@ -204,14 +224,21 @@ export default function VideoUpload({ onVideoUpload, onProcessingStart, onProces
   });
 
   const handleFileUpload = async (file: File) => {
-    setIsUploading(true);
     setUploadedFile(file);
+    setIsReadyToAnalyze(true);
+  };
+
+  const handleBeginAnalysis = () => {
+    if (!uploadedFile) return;
+    
+    setIsUploading(true);
+    setIsReadyToAnalyze(false);
     setAnalysisProgress('Uploading video...');
     setProgressPercentage(10);
     setCurrentStep('Upload');
     
     // Start hand processing and AI analysis
-    processVideoMutation.mutate(file);
+    processVideoMutation.mutate(uploadedFile);
   };
 
   const openFileDialog = () => {
@@ -232,32 +259,34 @@ export default function VideoUpload({ onVideoUpload, onProcessingStart, onProces
         {/* Main Upload Glass */}
         <div className="text-center space-elegant">
           {!isProcessing ? (
-            <div
-              className={cn(
-                "relative cursor-pointer rounded-3xl overflow-hidden group",
-                "glass-ultra liquid-hover fluid-transform",
-                isDragging && "scale-105",
-                uploadedFile ? "glass-strong" : ""
-              )}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-              onClick={openFileDialog}
-              data-testid="upload-area"
-            >
-            <div className="p-20 text-center">
-              {uploadedFile ? (
-                <div className="space-y-6">
-                  <div className="relative">
-                    <CheckCircle className="h-20 w-20 text-emerald-400 mx-auto drop-shadow-lg" />
-                    <div className="absolute inset-0 bg-emerald-400/20 rounded-full blur-xl"></div>
+            <div>
+              <div
+                className={cn(
+                  "relative cursor-pointer rounded-3xl overflow-hidden group",
+                  "glass-ultra liquid-hover fluid-transform",
+                  isDragging && "scale-105",
+                  uploadedFile ? "glass-strong" : "",
+                  isReadyToAnalyze && "pointer-events-none"
+                )}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                onClick={!isReadyToAnalyze ? openFileDialog : undefined}
+                data-testid="upload-area"
+              >
+              <div className="p-20 text-center">
+                {uploadedFile ? (
+                  <div className="space-y-6">
+                    <div className="relative">
+                      <CheckCircle className="h-20 w-20 text-emerald-400 mx-auto drop-shadow-lg" />
+                      <div className="absolute inset-0 bg-emerald-400/20 rounded-full blur-xl"></div>
+                    </div>
+                    <div className="space-y-3">
+                      <h3 className="text-2xl font-light text-glass">Video Selected</h3>
+                      <p className="text-white/60 text-sm font-light tracking-wide">{uploadedFile.name}</p>
+                    </div>
                   </div>
-                  <div className="space-y-3">
-                    <h3 className="text-2xl font-light text-glass">Ready</h3>
-                    <p className="text-white/60 text-sm font-light tracking-wide">{uploadedFile.name}</p>
-                  </div>
-                </div>
-              ) : (
+                ) : (
                 <div className="space-y-6">
                   <div className="relative">
                     {isUploading ? (
@@ -309,6 +338,54 @@ export default function VideoUpload({ onVideoUpload, onProcessingStart, onProces
                 </div>
               )}
             </div>
+              </div>
+
+              {/* Begin Analysis Button */}
+              {isReadyToAnalyze && uploadedFile && (
+                <div className="mt-6 space-y-4">
+                  <button
+                    onClick={handleBeginAnalysis}
+                    className={cn(
+                      "w-full px-8 py-4 rounded-2xl",
+                      "glass-card liquid-hover fluid-transform",
+                      "text-white font-light text-lg tracking-wide",
+                      "transition-all duration-300",
+                      "hover:glass-hover hover:scale-105",
+                      "active:scale-95",
+                      "relative overflow-hidden group",
+                      "focus:outline-none focus:ring-2 focus:ring-white/20"
+                    )}
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-r from-blue-500/20 via-purple-500/20 to-emerald-500/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                    <span className="relative z-10 flex items-center justify-center gap-2">
+                      <Play className="h-5 w-5" />
+                      Begin Analysis
+                    </span>
+                  </button>
+                  
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setUploadedFile(null);
+                      setIsReadyToAnalyze(false);
+                      if (fileInputRef.current) {
+                        fileInputRef.current.value = '';
+                      }
+                    }}
+                    className={cn(
+                      "w-full px-6 py-3 rounded-xl",
+                      "glass-subtle text-white/70",
+                      "text-sm font-light tracking-wide",
+                      "transition-all duration-300",
+                      "hover:text-white hover:glass-strong hover:scale-[1.02]",
+                      "active:scale-95",
+                      "focus:outline-none focus:ring-2 focus:ring-white/10"
+                    )}
+                  >
+                    Choose Different Video
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             /* Processing View */
@@ -355,23 +432,6 @@ export default function VideoUpload({ onVideoUpload, onProcessingStart, onProces
           )}
         </div>
 
-        {/* Elegant Action */}
-        {uploadedFile && !isProcessing && (
-          <div className="flex justify-center">
-            <button 
-              onClick={() => handleFileUpload(uploadedFile)}
-              className={cn(
-                "glass-card rounded-2xl px-8 py-4 text-white font-light tracking-wide",
-                "liquid-hover fluid-transform flex items-center space-x-3",
-                "hover:glass-hover focus:outline-none focus:ring-2 focus:ring-white/20"
-              )}
-              data-testid="button-process"
-            >
-              <Play className="h-5 w-5" />
-              <span className="text-lg">Begin Analysis</span>
-            </button>
-          </div>
-        )}
 
         <input
           ref={fileInputRef}

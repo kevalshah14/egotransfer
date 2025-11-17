@@ -215,8 +215,12 @@ export default function DetailedVideoAnalysis({
       try {
         setIsLoading(true);
         
+        // Get session from localStorage if available
+        const session = localStorage.getItem("auth_session");
+        const sessionParam = session ? `?session=${session}` : '';
+        
         // Fetch hand tracking data
-        const trackingResponse = await fetch(`/hand/tracking/${analysisData.handJobId}`, {
+        const trackingResponse = await fetch(`/hand/tracking/${analysisData.handJobId}${sessionParam}`, {
           signal: abortController.signal
         });
         
@@ -228,7 +232,7 @@ export default function DetailedVideoAnalysis({
         }
         
         // Fetch processing statistics
-        const statsResponse = await fetch(`/hand/stats/${analysisData.handJobId}`, {
+        const statsResponse = await fetch(`/hand/stats/${analysisData.handJobId}${sessionParam}`, {
           signal: abortController.signal
         });
         

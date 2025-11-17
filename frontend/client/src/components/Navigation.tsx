@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Upload, Eye, Cpu, Settings, Menu, X } from 'lucide-react';
+import { Upload, Eye, Settings, Menu, X } from 'lucide-react'; // Cpu icon removed (robot control hidden)
 import { cn } from '@/lib/utils';
+import { UserMenu } from './Auth';
 
 interface NavigationProps {
   currentPage: 'upload' | 'analysis' | 'robot' | 'settings';
@@ -14,7 +15,7 @@ export default function Navigation({ currentPage, onPageChange, isProcessing = f
   const navItems = [
     { id: 'upload' as const, label: 'Upload Video', icon: Upload },
     { id: 'analysis' as const, label: 'Analysis', icon: Eye },
-    { id: 'robot' as const, label: 'Robot Control', icon: Cpu },
+    // { id: 'robot' as const, label: 'Robot Control', icon: Cpu }, // Hidden for now
     { id: 'settings' as const, label: 'Settings', icon: Settings },
   ];
 
@@ -53,6 +54,9 @@ export default function Navigation({ currentPage, onPageChange, isProcessing = f
                 </button>
               );
             })}
+            <div className="ml-2">
+              <UserMenu />
+            </div>
           </nav>
         </div>
       </div>
@@ -116,6 +120,9 @@ export default function Navigation({ currentPage, onPageChange, isProcessing = f
                   </button>
                 );
               })}
+              <div className="pt-2 border-t border-white/10">
+                <UserMenu />
+              </div>
             </div>
           </div>
         </div>

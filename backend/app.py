@@ -4,13 +4,15 @@ FastAPI Application Factory
 Creates and configures the FastAPI application with all routes and middleware.
 """
 
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 import logging
+import os
 
-from routes import ai_processing, hand_processing, robot_control
+from routes import ai_processing, hand_processing, robot_control, auth
+from routes.auth import get_current_user_optional, get_current_user_required
 from services.job_manager import JobManager, get_job_manager
 
 logger = logging.getLogger(__name__)
@@ -29,15 +31,23 @@ def create_app() -> FastAPI:
     )
     
     # Add CORS middleware
+    # In production, set ALLOWED_ORIGINS environment variable
+    # Example: ALLOWED_ORIGINS=https://yourdomain.com,https://www.yourdomain.com
+    allowed_origins = os.getenv("ALLOWED_ORIGINS", "*").split(",")
+    if allowed_origins == ["*"] and os.getenv("ENVIRONMENT") == "production":
+        logger.warning("⚠️  CORS is set to allow all origins in production! This is insecure.")
+        logger.warning("⚠️  Set ALLOWED_ORIGINS environment variable to restrict access.")
+    
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],  # Configure appropriately for production
+        allow_origins=allowed_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
     )
     
     # Include routers
+    app.include_router(auth.router)
     app.include_router(ai_processing.router)
     app.include_router(hand_processing.router)
     app.include_router(robot_control.router)
@@ -45,11 +55,16 @@ def create_app() -> FastAPI:
     # Add general jobs endpoints
     @app.get("/jobs")
     async def get_all_jobs(
-        job_manager: JobManager = Depends(get_job_manager)
+        request: Request,
+        job_manager: JobManager = Depends(get_job_manager),
+        current_user: dict = Depends(get_current_user_optional)
     ):
-        """Get all processing jobs."""
+        """Get all processing jobs for the current user."""
         try:
-            jobs = job_manager.list_jobs()
+            # Filter jobs by user_id if authenticated
+            user_id = current_user["id"] if current_user else None
+            jobs = job_manager.list_jobs(user_id=user_id)
+            
             return {
                 "jobs": [
                     {
@@ -70,13 +85,20 @@ def create_app() -> FastAPI:
     @app.get("/jobs/{job_id}")
     async def get_job_status(
         job_id: str,
-        job_manager: JobManager = Depends(get_job_manager)
+        request: Request,
+        job_manager: JobManager = Depends(get_job_manager),
+        current_user: dict = Depends(get_current_user_optional)
     ):
         """Get the status of a processing job."""
         try:
             job = job_manager.get_job(job_id)
             if not job:
                 raise HTTPException(status_code=404, detail="Job not found")
+            
+            # Check if user has access to this job
+            user_id = current_user["id"] if current_user else None
+            if job.user_id and job.user_id != user_id:
+                raise HTTPException(status_code=403, detail="Access denied to this job")
             
             return {
                 "job_id": job_id,
@@ -106,10 +128,21 @@ def create_app() -> FastAPI:
     @app.delete("/jobs/{job_id}")
     async def delete_job(
         job_id: str,
-        job_manager: JobManager = Depends(get_job_manager)
+        request: Request,
+        job_manager: JobManager = Depends(get_job_manager),
+        current_user: dict = Depends(get_current_user_optional)
     ):
         """Delete a specific processing job."""
         try:
+            job = job_manager.get_job(job_id)
+            if not job:
+                raise HTTPException(status_code=404, detail="Job not found")
+            
+            # Check if user has access to delete this job
+            user_id = current_user["id"] if current_user else None
+            if job.user_id and job.user_id != user_id:
+                raise HTTPException(status_code=403, detail="Access denied to delete this job")
+            
             success = job_manager.delete_job(job_id)
             if not success:
                 raise HTTPException(status_code=404, detail="Job not found")
@@ -123,11 +156,22 @@ def create_app() -> FastAPI:
     
     @app.delete("/jobs")
     async def clear_all_jobs(
-        job_manager: JobManager = Depends(get_job_manager)
+        request: Request,
+        job_manager: JobManager = Depends(get_job_manager),
+        current_user: dict = Depends(get_current_user_optional)
     ):
-        """Clear all processing jobs."""
+        """Clear all processing jobs for the current user."""
         try:
-            deleted_count = job_manager.delete_all_jobs()
+            # Get user's jobs
+            user_id = current_user["id"] if current_user else None
+            jobs = job_manager.list_jobs(user_id=user_id)
+            
+            # Delete each job
+            deleted_count = 0
+            for job in jobs:
+                if job_manager.delete_job(job.job_id):
+                    deleted_count += 1
+            
             return {
                 "message": f"Cleared {deleted_count} jobs successfully",
                 "deleted_count": deleted_count
