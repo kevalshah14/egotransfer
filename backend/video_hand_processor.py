@@ -12,6 +12,8 @@ import mediapipe as mp
 import numpy as np
 import os
 import json
+import subprocess
+import tempfile
 from typing import List, Dict, Tuple, Optional
 import time
 from dataclasses import dataclass, asdict
@@ -203,6 +205,15 @@ class VideoHandProcessor:
             
         if output_video_path:
             print(f"Video processing complete! Output saved to: {output_video_path}")
+            
+            # Re-encode with FFmpeg to ensure H.264 browser compatibility
+            try:
+                self._reencode_with_ffmpeg(output_video_path)
+                print(f"✓ Re-encoded with H.264 for browser playback")
+            except Exception as e:
+                print(f"Warning: FFmpeg re-encoding failed: {e}")
+                print(f"Video may not play in browsers")
+                
         print(f"Extracted hand data for {len(self.tracking_data)} frames")
         
         # Save tracking data if path provided
@@ -210,6 +221,40 @@ class VideoHandProcessor:
             self._save_tracking_data(tracking_data_path)
             
         return True
+    
+    def _reencode_with_ffmpeg(self, video_path: str):
+        """
+        Re-encode video with FFmpeg to ensure H.264 browser compatibility.
+        OpenCV's VideoWriter has limited codec support, so we use FFmpeg as a fallback.
+        
+        Args:
+            video_path: Path to video file to re-encode
+        """
+        # Create temporary file for re-encoded video
+        temp_path = f"{video_path}.temp.mp4"
+        
+        # FFmpeg command for H.264 encoding with web-optimized settings
+        cmd = [
+            'ffmpeg',
+            '-y',  # Overwrite output
+            '-i', video_path,  # Input file
+            '-c:v', 'libx264',  # H.264 codec
+            '-preset', 'medium',  # Encoding speed/quality balance
+            '-crf', '23',  # Quality (lower = better, 23 is default)
+            '-pix_fmt', 'yuv420p',  # Pixel format for browser compatibility
+            '-movflags', '+faststart',  # Enable streaming (move moov atom to front)
+            '-an',  # No audio
+            temp_path
+        ]
+        
+        # Run FFmpeg
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        
+        if result.returncode != 0:
+            raise Exception(f"FFmpeg failed: {result.stderr}")
+        
+        # Replace original with re-encoded version
+        os.replace(temp_path, video_path)
     
     def _convert_to_16_9(self, frame, target_width, target_height):
         """
