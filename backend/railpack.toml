@@ -1,0 +1,24 @@
+# Railpack Configuration for Backend Service
+# System dependencies for OpenCV/MediaPipe
+
+[build]
+# Install system packages needed for OpenCV and MediaPipe
+apt_packages = [
+    "libgl1-mesa-glx",      # OpenGL library (provides libGL.so.1)
+    "libgl1",               # OpenGL library alternative
+    "libglib2.0-0",         # GLib library
+    "libsm6",               # X11 Session Management library
+    "libxext6",             # X11 extensions library
+    "libxrender1",          # X Rendering Extension library
+    "libgomp1",             # GCC OpenMP library
+    "libgthread-2.0-0",     # GLib thread library
+    "libice6",              # X11 Inter-Client Exchange library
+    "libx11-6",             # X11 client library
+    "libfontconfig1",       # Font configuration library
+    "libxcb1",              # X protocol C-language Binding
+    "ffmpeg"                # Video codec support
+]
+
+[deploy]
+start_command = "uvicorn main:app --host 0.0.0.0 --port $PORT"
+
