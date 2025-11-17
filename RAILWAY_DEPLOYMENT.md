@@ -196,10 +196,18 @@ You should see the FastAPI interactive documentation.
 
 ### Backend Issues
 
+**Problem**: Build fails with "Error creating build plan with Nixpacks"
+- Ensure `nixpacks.toml` exists in the backend directory
+- Verify `runtime.txt` specifies Python version (should be `python-3.12`)
+- Check that `requirements.txt` is in the backend root directory
+- Make sure Root Directory is set to `backend` in Railway settings
+- Try removing and recreating the service if the issue persists
+
 **Problem**: Backend fails to start
 - Check that `PORT` environment variable is set (Railway sets this automatically)
 - Verify `requirements.txt` includes all dependencies
 - Check logs in Railway dashboard
+- Ensure `main.py` exports `app` at module level (should have `app = create_app()`)
 
 **Problem**: CORS errors
 - Ensure `ALLOWED_ORIGINS` includes your frontend URL
