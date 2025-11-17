@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { Play, Pause, SkipBack, SkipForward, Hand, Box, Cpu, Zap, X, ChevronRight, ChevronLeft, Volume2, VolumeX, Settings, RotateCcw } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
+import { apiUrl } from '@/lib/config';
 
 interface HandSkeleton {
   points: { x: number; y: number; confidence: number }[];
@@ -220,7 +221,7 @@ export default function DetailedVideoAnalysis({
         const sessionParam = session ? `?session=${session}` : '';
         
         // Fetch hand tracking data
-        const trackingResponse = await fetch(`/hand/tracking/${analysisData.handJobId}${sessionParam}`, {
+        const trackingResponse = await fetch(apiUrl(`hand/tracking/${analysisData.handJobId}${sessionParam}`), {
           signal: abortController.signal
         });
         
@@ -232,7 +233,7 @@ export default function DetailedVideoAnalysis({
         }
         
         // Fetch processing statistics
-        const statsResponse = await fetch(`/hand/stats/${analysisData.handJobId}${sessionParam}`, {
+        const statsResponse = await fetch(apiUrl(`hand/stats/${analysisData.handJobId}${sessionParam}`), {
           signal: abortController.signal
         });
         

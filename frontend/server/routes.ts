@@ -86,7 +86,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const formData = new FormData();
-      formData.append('file', new Blob([req.file.buffer]), req.file.originalname);
+      formData.append('file', new Blob([new Uint8Array(req.file.buffer)]), req.file.originalname);
       
       // Forward all form fields
       Object.keys(req.body).forEach(key => {
@@ -145,11 +145,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { job_id } = req.params;
       const response = await fetch(`${BACKEND_URL}/hand/video/${job_id}`);
       
-      // Forward the video stream
-      response.body?.pipe(res);
+      // Set content type and forward the video
+      res.setHeader('Content-Type', response.headers.get('Content-Type') || 'video/mp4');
+      const buffer = await response.arrayBuffer();
+      res.send(Buffer.from(buffer));
     } catch (error) {
       console.error("Hand video error:", error);
       res.status(500).json({ error: "Failed to get video" });
+    }
+  });
+
+  // Get job status - proxy to backend
+  app.get("/jobs/:job_id", async (req, res) => {
+    try {
+      const { job_id } = req.params;
+      const session = req.query.session;
+      const url = session 
+        ? `${BACKEND_URL}/hand/jobs/${job_id}?session=${session}`
+        : `${BACKEND_URL}/hand/jobs/${job_id}`;
+      
+      const response = await fetch(url);
+      const data = await response.json();
+      res.json(data);
+    } catch (error) {
+      console.error("Job status error:", error);
+      res.status(500).json({ error: "Failed to get job status" });
+    }
+  });
+
+  app.get("/hand/commands/:job_id", async (req, res) => {
+    try {
+      const { job_id } = req.params;
+      const session = req.query.session;
+      const url = session 
+        ? `${BACKEND_URL}/hand/commands/${job_id}?session=${session}`
+        : `${BACKEND_URL}/hand/commands/${job_id}`;
+      
+      const response = await fetch(url);
+      
+      // Set content type and forward the file
+      res.setHeader('Content-Type', response.headers.get('Content-Type') || 'application/json');
+      const buffer = await response.arrayBuffer();
+      res.send(Buffer.from(buffer));
+    } catch (error) {
+      console.error("Hand commands error:", error);
+      res.status(500).json({ error: "Failed to get commands" });
     }
   });
 
@@ -302,25 +342,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get analysis result
+  // Get analysis result - proxy to backend
+  app.get("/ai/analysis/:job_id", async (req, res) => {
+    try {
+      const { job_id } = req.params;
+      const session = req.query.session;
+      const url = session 
+        ? `${BACKEND_URL}/ai/analysis/${job_id}?session=${session}`
+        : `${BACKEND_URL}/ai/analysis/${job_id}`;
+      
+      const response = await fetch(url);
+      const data = await response.json();
+      res.json(data);
+    } catch (error) {
+      console.error("AI analysis result error:", error);
+      res.status(500).json({ error: "Failed to get analysis result" });
+    }
+  });
+
+  // Get analysis result (legacy /api prefix)
   app.get("/api/ai/analysis/:job_id", async (req, res) => {
     try {
       const { job_id } = req.params;
+      const session = req.query.session;
+      const url = session 
+        ? `${BACKEND_URL}/ai/analysis/${job_id}?session=${session}`
+        : `${BACKEND_URL}/ai/analysis/${job_id}`;
       
-      // Return mock analysis result
-      res.json({
-        task_description: "Hand Gesture Recognition and Object Manipulation",
-        timeline: [
-          { timestamp: 0.5, action: "Hand enters frame", confidence: 0.95 },
-          { timestamp: 2.1, action: "Grip pattern detected", confidence: 0.89 },
-          { timestamp: 3.7, action: "Object interaction", confidence: 0.92 },
-          { timestamp: 5.2, action: "Task completion", confidence: 0.87 }
-        ],
-        robot_notes: "Complex manipulation task with high dexterity requirements. Recommend slower execution speed for accuracy.",
-        confidence: 89,
-        objects: ["Coffee Cup", "Smartphone", "Keyboard"],
-        actors: ["Left Hand", "Right Hand"]
-      });
+      const response = await fetch(url);
+      const data = await response.json();
+      res.json(data);
     } catch (error) {
       console.error("AI analysis result error:", error);
       res.status(500).json({ error: "Failed to get analysis result" });

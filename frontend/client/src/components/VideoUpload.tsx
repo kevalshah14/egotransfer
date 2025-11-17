@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { Video, CheckCircle, Play } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useMutation } from '@tanstack/react-query';
+import { apiUrl } from '@/lib/config';
 import { useToast } from '@/hooks/use-toast';
 
 interface VideoUploadProps {
@@ -92,7 +93,7 @@ export default function VideoUpload({ onVideoUpload, onProcessingStart, onProces
 
       // Get session from localStorage if available
       const session = localStorage.getItem("auth_session");
-      const url = session ? `/hand/process?session=${session}` : '/hand/process';
+      const url = session ? apiUrl(`hand/process?session=${session}`) : apiUrl('hand/process');
 
       const response = await fetch(url, {
         method: 'POST',
@@ -119,7 +120,7 @@ export default function VideoUpload({ onVideoUpload, onProcessingStart, onProces
         try {
           // Include session in status check
           const session = localStorage.getItem("auth_session");
-          const statusUrl = session ? `/jobs/${handJobId}?session=${session}` : `/jobs/${handJobId}`;
+          const statusUrl = session ? apiUrl(`jobs/${handJobId}?session=${session}`) : apiUrl(`jobs/${handJobId}`);
           const response = await fetch(statusUrl);
           
           if (response.ok) {
@@ -131,7 +132,7 @@ export default function VideoUpload({ onVideoUpload, onProcessingStart, onProces
               setEta('');
               
               // Try to get AI analysis results (may not exist if AI analysis failed)
-              const analysisUrl = session ? `/ai/analysis/${handJobId}?session=${session}` : `/ai/analysis/${handJobId}`;
+              const analysisUrl = session ? apiUrl(`ai/analysis/${handJobId}?session=${session}`) : apiUrl(`ai/analysis/${handJobId}`);
               const analysisResponse = await fetch(analysisUrl);
               
               let analysisData: AnalysisResult | null = null;

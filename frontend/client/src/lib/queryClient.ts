@@ -1,4 +1,5 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { apiUrl } from './config';
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
@@ -16,10 +17,13 @@ export async function apiRequest(
   const session = localStorage.getItem("auth_session");
   const headers: Record<string, string> = data ? { "Content-Type": "application/json" } : {};
   
+  // Build full URL with API base
+  const fullUrl = apiUrl(url);
+  
   // Add session as query parameter for backend compatibility
   const urlWithSession = session ? 
-    (url.includes('?') ? `${url}&session=${session}` : `${url}?session=${session}`) : 
-    url;
+    (fullUrl.includes('?') ? `${fullUrl}&session=${session}` : `${fullUrl}?session=${session}`) : 
+    fullUrl;
   
   const res = await fetch(urlWithSession, {
     method,
@@ -41,6 +45,9 @@ export const getQueryFn: <T>(options: {
     // Get session from localStorage if available
     const session = localStorage.getItem("auth_session");
     let url = queryKey.join("/") as string;
+    
+    // Build full URL with API base
+    url = apiUrl(url);
     
     // Add session as query parameter for backend compatibility
     if (session) {

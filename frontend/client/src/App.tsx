@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/lib/auth";
 import { AuthGuard } from "@/components/Auth";
+import { apiUrl } from "@/lib/config";
 import NotFound from "@/pages/not-found";
 import VideoUpload from "@/components/VideoUpload";
 import DetailedVideoAnalysis from "@/components/DetailedVideoAnalysis";
@@ -58,14 +59,14 @@ function VideoProcessingApp() {
       const sessionParam = session ? `?session=${session}` : '';
       
       // Fetch job data
-      const jobResponse = await fetch(`/jobs/${jobId}${sessionParam}`);
+      const jobResponse = await fetch(apiUrl(`jobs/${jobId}${sessionParam}`));
       if (!jobResponse.ok) {
         throw new Error('Failed to fetch job data');
       }
       const jobData = await jobResponse.json();
       
       // Fetch analysis data
-      const analysisResponse = await fetch(`/ai/analysis/${jobId}${sessionParam}`);
+      const analysisResponse = await fetch(apiUrl(`ai/analysis/${jobId}${sessionParam}`));
       if (!analysisResponse.ok) {
         throw new Error('Failed to fetch analysis data');
       }
