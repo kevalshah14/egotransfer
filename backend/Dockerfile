@@ -27,11 +27,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy requirements file
 COPY requirements.txt .
 
-# Install opencv-python-headless FIRST to prevent other variants
+# Install NumPy 1.x FIRST (required for MediaPipe compatibility)
+RUN pip install --no-cache-dir "numpy>=1.24.0,<2.0.0"
+
+# Install opencv-python-headless to prevent other variants
 RUN pip install --no-cache-dir opencv-python-headless==4.8.1.78
 
 # Install all other dependencies
-# Use --no-deps for packages that might try to install opencv variants
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Remove any non-headless OpenCV packages if they snuck in
