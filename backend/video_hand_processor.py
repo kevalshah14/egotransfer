@@ -113,25 +113,30 @@ class VideoHandProcessor:
         # Setup video writer with H.264 codec if output path provided
         out = None
         if output_video_path:
-            # Try different H.264 codecs for better browser compatibility
-            codecs_to_try = [
-                ('H.264 (avc1)', cv2.VideoWriter_fourcc(*'avc1')),
-                ('H.264 (H264)', cv2.VideoWriter_fourcc(*'H264')),
-                ('H.264 (X264)', cv2.VideoWriter_fourcc(*'X264')),
-                ('MPEG-4', cv2.VideoWriter_fourcc(*'mp4v'))
-            ]
+            # Allow overriding codec order via env (HAND_VIDEO_CODECS=mp4v,avc1,...)
+            codec_env = os.getenv("HAND_VIDEO_CODECS", "mp4v,avc1,H264,X264")
+            codec_order = [c.strip().lower() for c in codec_env.split(",") if c.strip()]
             
-            for codec_name, fourcc in codecs_to_try:
+            codec_map = {
+                "mp4v": ("MPEG-4 (mp4v)", cv2.VideoWriter_fourcc(*"mp4v")),
+                "avc1": ("H.264 (avc1)", cv2.VideoWriter_fourcc(*"avc1")),
+                "h264": ("H.264 (H264)", cv2.VideoWriter_fourcc(*"H264")),
+                "x264": ("H.264 (X264)", cv2.VideoWriter_fourcc(*"X264"))
+            }
+            
+            for codec_key in codec_order:
+                if codec_key not in codec_map:
+                    continue
+                codec_name, fourcc = codec_map[codec_key]
                 out = cv2.VideoWriter(output_video_path, fourcc, fps, (output_width, output_height))
                 if out.isOpened():
                     print(f"Using codec: {codec_name}")
                     break
-                else:
-                    out.release()
-                    out = None
+                out.release()
+                out = None
             
             if out is None:
-                print("Warning: Could not initialize video writer, skipping output video")
+                print("Warning: Could not initialize video writer with any codec, skipping output video")
         
         # Clear previous tracking data
         self.tracking_data = []

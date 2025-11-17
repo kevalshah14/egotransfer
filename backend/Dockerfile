@@ -22,6 +22,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libfontconfig1 \
     libxcb1 \
     ffmpeg \
+    libx264-dev \
+    libx264-164 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements file

@@ -17,7 +17,9 @@ aptPkgs = [
     "libx11-6",             # X11 client library
     "libfontconfig1",       # Font configuration library
     "libxcb1",              # X protocol C-language Binding
-    "ffmpeg"                # Video codec support
+    "ffmpeg",               # Video codec support
+    "libx264-dev",          # x264 encoder dev files for FFmpeg
+    "libx264-164"           # x264 runtime for encoding
 ]
 
 # Custom install phase to ensure ONLY opencv-python-headless is installed

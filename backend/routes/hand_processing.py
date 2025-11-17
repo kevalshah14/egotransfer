@@ -359,13 +359,15 @@ async def get_job_status(
         if not job:
             raise HTTPException(status_code=404, detail="Job not found")
         
+        status_value = job.status if isinstance(job.status, str) else job.status.value
         return {
             "job_id": job_id,
-            "status": job.status.value,
+            "status": status_value,
             "progress": job.progress,
             "created_at": job.created_at.isoformat() if job.created_at else None,
             "updated_at": job.updated_at.isoformat() if job.updated_at else None,
-            "error": job.error_message if hasattr(job, 'error_message') else None
+            "processed_files": job.processed_files,
+            "error": job.error if hasattr(job, "error") else None
         }
     except HTTPException:
         raise
