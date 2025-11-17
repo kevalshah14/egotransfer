@@ -21,7 +21,7 @@ aptPkgs = [
 ]
 
 # Let Nixpacks auto-detect Python and handle pip installation
-# Nixpacks will automatically install requirements.txt
+# Nixpacks will automatically install from pyproject.toml
 
 [start]
 cmd = "uvicorn main:app --host 0.0.0.0 --port $PORT"
