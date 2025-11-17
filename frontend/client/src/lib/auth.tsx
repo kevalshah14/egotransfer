@@ -34,11 +34,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.setItem("auth_token", token);
       setSession(sessionId);
       
-      // Clean up URL
+      // Clean up URL and reload to clear OAuth params
       window.history.replaceState({}, document.title, window.location.pathname);
       
-      // Fetch user info
-      fetchUser(sessionId);
+      // Fetch user info and set loading to false
+      fetchUser(sessionId).then(() => {
+        // Force a re-render after successful auth
+        window.location.href = window.location.pathname;
+      });
     } else {
       // Check for existing session
       const storedSession = localStorage.getItem("auth_session");
@@ -51,7 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const fetchUser = async (sessionId: string) => {
+  const fetchUser = async (sessionId: string): Promise<void> => {
     try {
       const response = await fetch(`/api/auth/user?session=${sessionId}`, {
         credentials: "include",
@@ -63,12 +66,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (response.ok) {
         const userData = await response.json();
         setUser(userData);
+        setLoading(false);
+        return Promise.resolve();
       } else if (response.status === 401) {
         // Session invalid, clear it
         localStorage.removeItem("auth_session");
         localStorage.removeItem("auth_token");
         setSession(null);
         setUser(null);
+        setLoading(false);
+        return Promise.reject(new Error("Session invalid"));
       }
     } catch (error) {
       console.error("Failed to fetch user:", error);
@@ -76,8 +83,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.removeItem("auth_token");
       setSession(null);
       setUser(null);
-    } finally {
       setLoading(false);
+      return Promise.reject(error);
     }
   };
 

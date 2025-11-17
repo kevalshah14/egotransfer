@@ -78,6 +78,81 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Hand Processing Routes - Proxy to Backend
+  app.post("/hand/process", upload.single('file'), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "No file provided" });
+      }
+
+      const formData = new FormData();
+      formData.append('file', new Blob([req.file.buffer]), req.file.originalname);
+      
+      // Forward all form fields
+      Object.keys(req.body).forEach(key => {
+        formData.append(key, req.body[key]);
+      });
+
+      const response = await fetch(`${BACKEND_URL}/hand/process`, {
+        method: 'POST',
+        body: formData as any,
+      });
+
+      const data = await response.json();
+      res.json(data);
+    } catch (error) {
+      console.error("Hand process error:", error);
+      res.status(500).json({ error: "Failed to process video" });
+    }
+  });
+
+  app.get("/hand/tracking/:job_id", async (req, res) => {
+    try {
+      const { job_id } = req.params;
+      const session = req.query.session;
+      const url = session 
+        ? `${BACKEND_URL}/hand/tracking/${job_id}?session=${session}`
+        : `${BACKEND_URL}/hand/tracking/${job_id}`;
+      
+      const response = await fetch(url);
+      const data = await response.json();
+      res.json(data);
+    } catch (error) {
+      console.error("Hand tracking error:", error);
+      res.status(500).json({ error: "Failed to get tracking data" });
+    }
+  });
+
+  app.get("/hand/stats/:job_id", async (req, res) => {
+    try {
+      const { job_id } = req.params;
+      const session = req.query.session;
+      const url = session 
+        ? `${BACKEND_URL}/hand/stats/${job_id}?session=${session}`
+        : `${BACKEND_URL}/hand/stats/${job_id}`;
+      
+      const response = await fetch(url);
+      const data = await response.json();
+      res.json(data);
+    } catch (error) {
+      console.error("Hand stats error:", error);
+      res.status(500).json({ error: "Failed to get stats" });
+    }
+  });
+
+  app.get("/hand/video/:job_id", async (req, res) => {
+    try {
+      const { job_id } = req.params;
+      const response = await fetch(`${BACKEND_URL}/hand/video/${job_id}`);
+      
+      // Forward the video stream
+      response.body?.pipe(res);
+    } catch (error) {
+      console.error("Hand video error:", error);
+      res.status(500).json({ error: "Failed to get video" });
+    }
+  });
+
   // Robot Control API Routes
   
   // Get robot status
