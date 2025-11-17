@@ -152,6 +152,11 @@ def print_startup_info(config):
     print()
 
 
+# Create FastAPI app instance for Railway/uvicorn
+# This allows uvicorn to import it directly: uvicorn main:app
+app = create_app()
+
+
 def main():
     """Main entry point."""
     print_banner()
@@ -166,9 +171,6 @@ def main():
     
     # Print startup information
     print_startup_info(config)
-    
-    # Create FastAPI app
-    app = create_app()
     
     try:
         # Run the server
