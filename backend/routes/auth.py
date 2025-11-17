@@ -150,6 +150,7 @@ async def google_callback(
         
         # Redirect to frontend with token
         redirect_url = f"{BASE_URL}/?token={access_token}&session={session_id}"
+        logger.info(f"Redirecting to: {redirect_url}")
         return RedirectResponse(url=redirect_url)
         
     except httpx.HTTPStatusError as e:
