@@ -21,6 +21,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isRedirecting, setIsRedirecting] = useState(false);
 
   useEffect(() => {
     // Safety timeout to ensure loading never hangs
@@ -117,23 +118,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signInWithGoogle = async () => {
     try {
+      setIsRedirecting(true);
       const response = await fetch(`/api/auth/sign-in/google`, {
         credentials: "include",
       });
       
       if (!response.ok) {
+        setIsRedirecting(false);
         throw new Error(`Failed to get OAuth URL: ${response.status}`);
       }
       
       const data = await response.json();
       
       if (data.url) {
+        // Small delay to show loading state smoothly
+        await new Promise(resolve => setTimeout(resolve, 300));
         // Redirect to Google OAuth
         window.location.href = data.url;
       } else {
+        setIsRedirecting(false);
         console.error("No OAuth URL returned from server");
       }
     } catch (error) {
+      setIsRedirecting(false);
       console.error("Failed to initiate Google sign-in:", error);
     }
   };
@@ -159,6 +166,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return (
     <AuthContext.Provider value={{ user, session, loading, signInWithGoogle, signOut }}>
       {children}
+      {/* Loading overlay during OAuth redirect */}
+      {isRedirecting && (
+        <div className="fixed inset-0 z-[9999] bg-gradient-to-br from-slate-950 via-black to-slate-900 flex items-center justify-center">
+          <div className="glass-card rounded-2xl p-8">
+            <div className="text-white text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white/30 border-t-white mx-auto mb-4"></div>
+              <p className="text-sm font-light text-white/70">Connecting to Google...</p>
+            </div>
+          </div>
+        </div>
+      )}
     </AuthContext.Provider>
   );
 }

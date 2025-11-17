@@ -131,10 +131,26 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-950 via-black to-slate-900">
-        <div className="glass-card rounded-2xl p-8">
+        {/* Background effects to match main app */}
+        <div className="absolute inset-0 opacity-30">
+          <motion.div 
+            className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl"
+            animate={{
+              scale: [1, 1.1, 1],
+              x: [0, 30, 0],
+              y: [0, -30, 0],
+            }}
+            transition={{
+              duration: 8,
+              repeat: Infinity,
+              ease: "easeInOut"
+            }}
+          />
+        </div>
+        <div className="glass-card rounded-2xl p-8 relative z-10">
           <div className="text-white text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white/30 border-t-white mx-auto mb-4"></div>
-            <p className="text-sm font-light text-white/70">Loading...</p>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white/30 border-t-white mx-auto mb-4"></div>
+            <p className="text-sm font-light text-white/70">Signing you in...</p>
           </div>
         </div>
       </div>
