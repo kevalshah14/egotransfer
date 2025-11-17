@@ -7,6 +7,77 @@ const upload = multer({ storage: multer.memoryStorage() });
 const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:8000";
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Authentication API Routes - Proxy to Backend
+  
+  // Google OAuth sign-in
+  app.get("/api/auth/sign-in/google", async (req, res) => {
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/auth/sign-in/google`);
+      const data = await response.json();
+      res.json(data);
+    } catch (error) {
+      console.error("Auth sign-in error:", error);
+      res.status(500).json({ error: "Failed to initiate sign-in" });
+    }
+  });
+
+  // Google OAuth callback
+  app.get("/api/auth/callback/google", async (req, res) => {
+    try {
+      const queryParams = new URLSearchParams(req.query as any).toString();
+      const response = await fetch(`${BACKEND_URL}/api/auth/callback/google?${queryParams}`);
+      
+      // If backend redirects, follow it
+      if (response.redirected) {
+        return res.redirect(response.url);
+      }
+      
+      const data = await response.json();
+      res.json(data);
+    } catch (error) {
+      console.error("Auth callback error:", error);
+      res.status(500).json({ error: "Authentication failed" });
+    }
+  });
+
+  // Get current user
+  app.get("/api/auth/user", async (req, res) => {
+    try {
+      const session = req.query.session || req.cookies.auth_session;
+      const url = session 
+        ? `${BACKEND_URL}/api/auth/user?session=${session}`
+        : `${BACKEND_URL}/api/auth/user`;
+      
+      const response = await fetch(url);
+      if (response.ok) {
+        const data = await response.json();
+        res.json(data);
+      } else {
+        res.status(response.status).json({ error: "Not authenticated" });
+      }
+    } catch (error) {
+      console.error("Get user error:", error);
+      res.status(500).json({ error: "Failed to get user" });
+    }
+  });
+
+  // Sign out
+  app.post("/api/auth/sign-out", async (req, res) => {
+    try {
+      const session = req.query.session || req.cookies.auth_session;
+      const url = session 
+        ? `${BACKEND_URL}/api/auth/sign-out?session=${session}`
+        : `${BACKEND_URL}/api/auth/sign-out`;
+      
+      const response = await fetch(url, { method: "POST" });
+      const data = await response.json();
+      res.json(data);
+    } catch (error) {
+      console.error("Sign out error:", error);
+      res.status(500).json({ error: "Failed to sign out" });
+    }
+  });
+
   // Robot Control API Routes
   
   // Get robot status
