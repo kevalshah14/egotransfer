@@ -1,0 +1,5 @@
+# Build trigger to force Railway rebuild without cache
+# Updated: 2025-11-17 05:56:00
+# This file forces Railway to rebuild when dependencies change
+BUILD_ID=fix-opengl-libs-v2
+

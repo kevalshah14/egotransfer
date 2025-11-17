@@ -1,5 +1,6 @@
 # Nixpacks configuration for Railway
 # See: https://nixpacks.com/docs/configuration/file
+# Updated: 2025-11-17 - OpenGL dependencies fix
 
 [phases.setup]
 nixPkgs = ["python312"]
