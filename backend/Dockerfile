@@ -27,8 +27,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy requirements file
 COPY requirements.txt .
 
-# Install NumPy 1.x FIRST (required for MediaPipe compatibility)
-RUN pip install --no-cache-dir "numpy>=1.24.0,<2.0.0"
+# Install pinned NumPy FIRST (required for MediaPipe compatibility)
+RUN pip install --no-cache-dir "numpy==1.26.4"
 
 # Install opencv-python-headless to prevent other variants
 RUN pip install --no-cache-dir opencv-python-headless==4.8.1.78
@@ -42,8 +42,11 @@ RUN pip uninstall -y opencv-python opencv-contrib-python opencv-contrib-python-h
 # Reinstall opencv-python-headless to ensure it's present
 RUN pip install --no-cache-dir --force-reinstall opencv-python-headless==4.8.1.78
 
-# Verify only headless version is installed
-RUN pip list | grep opencv
+# Force NumPy back to 1.26.x in case any dependency upgraded it
+RUN pip install --no-cache-dir --force-reinstall "numpy==1.26.4"
+
+# Verify only headless OpenCV and correct NumPy are installed
+RUN pip list | grep -E "opencv|numpy"
 
 # Copy application code
 COPY . .

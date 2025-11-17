@@ -25,11 +25,12 @@ aptPkgs = [
 cmds = [
     "python -m venv --copies /opt/venv",
     ". /opt/venv/bin/activate && pip install --upgrade pip",
-    ". /opt/venv/bin/activate && pip install 'numpy>=1.24.0,<2.0.0'",
+    ". /opt/venv/bin/activate && pip install 'numpy==1.26.4'",
     ". /opt/venv/bin/activate && pip install opencv-python-headless==4.8.1.78",
     ". /opt/venv/bin/activate && pip install -r requirements.txt",
     ". /opt/venv/bin/activate && (pip uninstall -y opencv-python opencv-contrib-python || true)",
     ". /opt/venv/bin/activate && pip install --force-reinstall opencv-python-headless==4.8.1.78",
+    ". /opt/venv/bin/activate && pip install --force-reinstall 'numpy==1.26.4'",
     ". /opt/venv/bin/activate && pip list | grep -E 'opencv|numpy'"
 ]
 
