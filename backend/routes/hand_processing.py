@@ -219,9 +219,10 @@ async def get_processing_stats(
 @router.get("/video/{job_id}")
 async def download_processed_video(
     job_id: str,
+    request: Request,
     job_manager: JobManager = Depends(get_job_manager)
 ):
-    """Download processed video with hand tracking overlay."""
+    """Stream processed video with hand tracking overlay (supports range requests for browser playback)."""
     try:
         job = job_manager.get_job(job_id)
         if not job:
@@ -237,10 +238,15 @@ async def download_processed_video(
         if not video_path.exists():
             raise HTTPException(status_code=404, detail="Video file not found on disk")
         
+        # FileResponse automatically handles range requests for video streaming
         return FileResponse(
             path=video_path,
             filename=video_filename,
-            media_type='video/mp4'
+            media_type='video/mp4',
+            headers={
+                'Accept-Ranges': 'bytes',
+                'Cache-Control': 'public, max-age=3600'
+            }
         )
         
     except Exception as e:

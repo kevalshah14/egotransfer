@@ -113,8 +113,9 @@ class VideoHandProcessor:
         # Setup video writer with H.264 codec if output path provided
         out = None
         if output_video_path:
-            # Allow overriding codec order via env (HAND_VIDEO_CODECS=mp4v,avc1,...)
-            codec_env = os.getenv("HAND_VIDEO_CODECS", "mp4v,avc1,H264,X264")
+            # Allow overriding codec order via env (HAND_VIDEO_CODECS=avc1,h264,...)
+            # Default to H.264 codecs for browser compatibility
+            codec_env = os.getenv("HAND_VIDEO_CODECS", "avc1,h264,x264,mp4v")
             codec_order = [c.strip().lower() for c in codec_env.split(",") if c.strip()]
             
             codec_map = {
