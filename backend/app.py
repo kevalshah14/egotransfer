@@ -4,12 +4,17 @@ FastAPI Application Factory
 Creates and configures the FastAPI application with all routes and middleware.
 """
 
+import os
+
+# Configure OpenCV to run in headless mode (must be before cv2 import)
+os.environ.setdefault('OPENCV_VIDEOIO_PRIORITY_MSMF', '0')
+os.environ.setdefault('OPENCV_VIDEOIO_DEBUG', '0')
+
 from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 import logging
-import os
 
 from routes import ai_processing, hand_processing, robot_control, auth
 from routes.auth import get_current_user_optional, get_current_user_required

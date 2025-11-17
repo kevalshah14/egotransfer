@@ -22,6 +22,10 @@ import sys
 import logging
 from pathlib import Path
 
+# Configure OpenCV to run in headless mode (before any cv2 imports)
+os.environ['OPENCV_VIDEOIO_PRIORITY_MSMF'] = '0'
+os.environ['OPENCV_VIDEOIO_DEBUG'] = '0'
+
 # Add the project root to Python path
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))

@@ -6,6 +6,7 @@ nixPkgs = ["python312"]
 # System dependencies for OpenCV/MediaPipe in headless environment
 aptPkgs = [
     "libgl1-mesa-glx",      # OpenGL library (provides libGL.so.1)
+    "libgl1",               # OpenGL library alternative
     "libglib2.0-0",         # GLib library
     "libsm6",               # X11 Session Management library
     "libxext6",             # X11 extensions library
@@ -14,8 +15,9 @@ aptPkgs = [
     "libgthread-2.0-0",     # GLib thread library
     "libice6",              # X11 Inter-Client Exchange library
     "libx11-6",             # X11 client library
-    "ffmpeg",               # Video codec support
-    "libavcodec-extra"      # Additional codec support
+    "libfontconfig1",       # Font configuration library
+    "libxcb1",              # X protocol C-language Binding
+    "ffmpeg"                # Video codec support
 ]
 
 [phases.install]
