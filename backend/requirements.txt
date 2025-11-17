@@ -11,9 +11,10 @@ pydobot>=1.3.2
 pydobot2>=0.1.0
 
 # Computer Vision & Hand Tracking
-opencv-python-headless>=4.8.0  # Headless version for server deployment
-mediapipe>=0.10.0
-numpy>=1.24.0
+# IMPORTANT: Install opencv-python-headless ONLY (no opencv-python or opencv-contrib-python)
+opencv-python-headless>=4.8.0,<4.9.0  # Headless version for server deployment
+mediapipe>=0.10.0,<0.11.0
+numpy>=1.24.0,<2.0.0
 
 # AI & Analysis
 google-genai>=1.38.0
