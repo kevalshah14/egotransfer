@@ -23,39 +23,59 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Safety timeout to ensure loading never hangs
+    const safetyTimeout = setTimeout(() => {
+      console.warn("Auth loading timeout - forcing completion");
+      setLoading(false);
+    }, 5000);
+
     // Check for session in URL params (from OAuth callback)
     const urlParams = new URLSearchParams(window.location.search);
     const token = urlParams.get("token");
     const sessionId = urlParams.get("session");
 
     if (token && sessionId) {
+      console.log("OAuth callback detected, storing session...");
       // Store session
       localStorage.setItem("auth_session", sessionId);
       localStorage.setItem("auth_token", token);
       setSession(sessionId);
       
-      // Clean up URL and reload to clear OAuth params
+      // Clean up URL parameters
       window.history.replaceState({}, document.title, window.location.pathname);
       
-      // Fetch user info and set loading to false
-      fetchUser(sessionId).then(() => {
-        // Force a re-render after successful auth
-        window.location.href = window.location.pathname;
-      });
+      // Fetch user info - no reload needed, React will re-render
+      fetchUser(sessionId)
+        .then(() => {
+          clearTimeout(safetyTimeout);
+        })
+        .catch((error) => {
+          console.error("Failed to fetch user after OAuth:", error);
+          clearTimeout(safetyTimeout);
+          setLoading(false);
+        });
     } else {
       // Check for existing session
       const storedSession = localStorage.getItem("auth_session");
       if (storedSession) {
         setSession(storedSession);
-        fetchUser(storedSession);
+        fetchUser(storedSession).finally(() => {
+          clearTimeout(safetyTimeout);
+        });
       } else {
         setLoading(false);
+        clearTimeout(safetyTimeout);
       }
     }
+
+    return () => {
+      clearTimeout(safetyTimeout);
+    };
   }, []);
 
   const fetchUser = async (sessionId: string): Promise<void> => {
     try {
+      console.log("Fetching user data with session:", sessionId.substring(0, 10) + "...");
       const response = await fetch(`/api/auth/user?session=${sessionId}`, {
         credentials: "include",
         headers: {
@@ -65,10 +85,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       if (response.ok) {
         const userData = await response.json();
+        console.log("User data fetched successfully:", userData.email);
         setUser(userData);
         setLoading(false);
         return Promise.resolve();
       } else if (response.status === 401) {
+        console.warn("Session invalid (401)");
         // Session invalid, clear it
         localStorage.removeItem("auth_session");
         localStorage.removeItem("auth_token");
@@ -76,6 +98,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(null);
         setLoading(false);
         return Promise.reject(new Error("Session invalid"));
+      } else {
+        console.error("Unexpected response status:", response.status);
+        setLoading(false);
+        return Promise.reject(new Error(`HTTP ${response.status}`));
       }
     } catch (error) {
       console.error("Failed to fetch user:", error);
