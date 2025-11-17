@@ -41,8 +41,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.setItem("auth_token", token);
       setSession(sessionId);
       
-      // Clean up URL parameters
-      window.history.replaceState({}, document.title, window.location.pathname);
+      // Clean up URL parameters - use full URL
+      const cleanUrl = window.location.origin + window.location.pathname;
+      window.history.replaceState({}, document.title, cleanUrl);
       
       // Fetch user info - no reload needed, React will re-render
       fetchUser(sessionId)

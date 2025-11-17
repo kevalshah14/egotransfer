@@ -2,8 +2,8 @@
 # See: https://nixpacks.com/docs/configuration/file
 
 [phases.setup]
-nixPkgs = ["python312", "mesa", "libGL", "glib", "xorg.libXext", "xorg.libXrender"]
-aptPkgs = ["libgl1-mesa-glx", "libglib2.0-0"]
+nixPkgs = ["python312"]
+aptPkgs = ["libgl1-mesa-glx", "libglib2.0-0", "libsm6", "libxext6", "libxrender1", "libgomp1"]
 
 [phases.install]
 cmds = ["pip install -r requirements.txt"]
