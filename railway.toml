@@ -1,0 +1,11 @@
+# Railway Configuration for Multi-Service Monorepo
+# This file helps Railway understand your project structure
+
+[build]
+builder = "NIXPACKS"
+
+# This configuration file is informational only
+# You still need to set Root Directory in Railway UI for each service:
+# - Backend service: Root Directory = "backend"
+# - Frontend service: Root Directory = "frontend"
+

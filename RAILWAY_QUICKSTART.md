@@ -16,8 +16,11 @@ git push origin main
 
 ### 3. Deploy Backend
 1. Click "New Service" → Select your repo
-2. Set **Root Directory**: `backend`
-3. Set **Start Command**: `uvicorn main:app --host 0.0.0.0 --port $PORT`
+2. **IMPORTANT**: Set **Root Directory** to `backend`
+   - Go to Settings → Source → Root Directory
+   - Type: `backend` (without slashes)
+   - This is REQUIRED or build will fail!
+3. Verify Start Command: `uvicorn main:app --host 0.0.0.0 --port $PORT`
 4. Add Environment Variables:
    ```
    GEMINI_API_KEY=your_key_here
@@ -26,8 +29,11 @@ git push origin main
 
 ### 4. Deploy Frontend
 1. Click "New Service" → Select your repo
-2. Set **Root Directory**: `frontend`
-3. Set **Start Command**: `npm start`
+2. **IMPORTANT**: Set **Root Directory** to `frontend`
+   - Go to Settings → Source → Root Directory
+   - Type: `frontend` (without slashes)
+   - This is REQUIRED or build will fail!
+3. Verify Start Command: `npm start`
 4. Add Environment Variables:
    ```
    NODE_ENV=production
