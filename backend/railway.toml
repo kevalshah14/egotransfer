@@ -1,9 +1,5 @@
 # Railway Configuration for Backend Service
-# Use Dockerfile for full control over OpenCV installation
-
-[build]
-builder = "DOCKERFILE"
-dockerfilePath = "Dockerfile"
+# Railway will auto-detect Dockerfile in the root directory
 
 [deploy]
 startCommand = "uvicorn main:app --host 0.0.0.0 --port $PORT"
