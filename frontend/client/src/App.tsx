@@ -12,6 +12,7 @@ import DetailedVideoAnalysis from "@/components/DetailedVideoAnalysis";
 // import RobotControl from "@/components/RobotControl"; // Hidden for now
 import Settings from "@/components/Settings";
 import Navigation from "@/components/Navigation";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 
 function VideoProcessingApp() {
   const [currentPage, setCurrentPage] = useState<'upload' | 'analysis' | 'robot' | 'settings'>('upload'); // robot type kept for compatibility but page is hidden
@@ -32,37 +33,10 @@ function VideoProcessingApp() {
       return;
     }
     
-    if ('startViewTransition' in document) {
-      setIsTransitioning(true);
-      // @ts-ignore - View Transitions API
-      document.startViewTransition(() => {
-        setCurrentPage(newPage);
-      }).finished.finally(() => {
-        setIsTransitioning(false);
-      });
-    } else {
-      // Fallback transition for browsers without View Transitions API
-      setIsTransitioning(true);
-      const pageContent = (document as any).querySelector('.page-content');
-      
-      if (pageContent) {
-        pageContent.classList.add('page-transition-exit');
-        
-        setTimeout(() => {
-          setCurrentPage(newPage);
-          pageContent.classList.remove('page-transition-exit');
-          pageContent.classList.add('page-transition-enter');
-          
-          setTimeout(() => {
-            pageContent.classList.remove('page-transition-enter');
-            setIsTransitioning(false);
-          }, 300);
-        }, 200);
-      } else {
-        setCurrentPage(newPage);
-        setIsTransitioning(false);
-      }
-    }
+    setIsTransitioning(true);
+    setCurrentPage(newPage);
+    // Transition state will be managed by AnimatePresence
+    setTimeout(() => setIsTransitioning(false), 400);
   };
 
   const handleVideoUpload = (file: File, analysisData?: any) => {
@@ -170,15 +144,64 @@ function VideoProcessingApp() {
     }
   };
 
+  // Check for reduced motion preference
+  const shouldReduceMotion = useReducedMotion();
+
+  // Animation variants for smooth page transitions
+  const pageVariants = {
+    initial: {
+      opacity: 0,
+      y: shouldReduceMotion ? 0 : 20,
+      scale: shouldReduceMotion ? 1 : 0.98,
+    },
+    animate: {
+      opacity: 1,
+      y: 0,
+      scale: 1,
+      transition: {
+        duration: shouldReduceMotion ? 0.2 : 0.4,
+        ease: [0.16, 1, 0.3, 1], // Custom easing for smooth feel
+      },
+    },
+    exit: {
+      opacity: 0,
+      y: shouldReduceMotion ? 0 : -20,
+      scale: shouldReduceMotion ? 1 : 0.98,
+      transition: {
+        duration: shouldReduceMotion ? 0.15 : 0.3,
+        ease: [0.16, 1, 0.3, 1],
+      },
+    },
+  };
+
   return (
-    <div className="relative overflow-hidden">
+    <div className="relative overflow-hidden min-h-screen bg-gradient-to-br from-slate-950 via-black to-slate-900">
       <Navigation 
         currentPage={currentPage} 
         onPageChange={navigateWithTransition} 
         isProcessing={isProcessing}
       />
-      <div className={`${isTransitioning ? 'pointer-events-none' : ''} page-content`}>
-        {renderCurrentPage()}
+      <div className="relative min-h-screen">
+        <AnimatePresence mode="sync" initial={false}>
+          <motion.div
+            key={currentPage}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            variants={pageVariants}
+            className={`${isTransitioning ? 'pointer-events-none' : ''} page-content w-full`}
+            style={{ 
+              willChange: 'opacity, transform',
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              minHeight: '100vh'
+            }}
+          >
+            {renderCurrentPage()}
+          </motion.div>
+        </AnimatePresence>
       </div>
     </div>
   );
