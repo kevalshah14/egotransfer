@@ -4,10 +4,10 @@
 
 [phases.setup]
 nixPkgs = ["python312"]
-# System dependencies for OpenCV/MediaPipe in headless environment
+# System dependencies for OpenCV/MediaPipe in headless environment (Ubuntu 24.04 compatible)
 aptPkgs = [
-    "libgl1-mesa-glx",      # OpenGL library (provides libGL.so.1)
-    "libgl1",               # OpenGL library alternative
+    "libgl1",               # OpenGL library (provides libGL.so.1)
+    "libglx0",              # GLX library
     "libglib2.0-0",         # GLib library
     "libsm6",               # X11 Session Management library
     "libxext6",             # X11 extensions library
