@@ -50,9 +50,10 @@ COPY . .
 ENV OPENCV_VIDEOIO_PRIORITY_MSMF=0
 ENV OPENCV_VIDEOIO_DEBUG=0
 
-# Expose port
-EXPOSE 8080
+# Expose port (Railway sets this dynamically)
+EXPOSE ${PORT:-8080}
 
 # Run the application
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
+# Use shell form to allow environment variable expansion
+CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-8080}
 
