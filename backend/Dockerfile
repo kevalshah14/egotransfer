@@ -1,5 +1,6 @@
 # Custom Dockerfile for Railway deployment
 # This gives us full control over OpenCV installation
+# Updated: 2025-11-17 06:25 - Force rebuild
 
 FROM python:3.12-slim
 
