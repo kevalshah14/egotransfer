@@ -78,7 +78,7 @@ function VideoProcessingApp() {
         aiJobId: jobId,
         handProcessing: jobData,
         aiAnalysis: analysisData,
-        processedVideoUrl: `/hand/video/${jobId}`,
+        processedVideoUrl: apiUrl(`hand/video/${jobId}${sessionParam}`),
         trackingData: `/hand/tracking/${jobId}`,
         robotCommands: `/hand/commands/${jobId}`,
       };

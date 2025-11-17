@@ -61,6 +61,15 @@ export default function DetailedVideoAnalysis({
   const abortControllerRef = useRef<AbortController | null>(null);
   const stepsScrollRef = useRef<HTMLDivElement>(null);
 
+  const normalizeApiUrl = useCallback((url?: string | null) => {
+    if (!url) return null;
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      return url;
+    }
+    const normalized = url.startsWith('/') ? url.slice(1) : url;
+    return apiUrl(normalized);
+  }, []);
+
   // Create stable object URL and manage lifecycle
   const objectUrl = useMemo(() => {
     if (processedVideoUrl) {
@@ -246,7 +255,7 @@ export default function DetailedVideoAnalysis({
         
         // Set processed video URL
         if (!abortController.signal.aborted) {
-          setProcessedVideoUrl(analysisData.processedVideoUrl);
+          setProcessedVideoUrl(normalizeApiUrl(analysisData.processedVideoUrl));
         }
         
       } catch (error) {
@@ -265,7 +274,7 @@ export default function DetailedVideoAnalysis({
     return () => {
       abortController.abort();
     };
-  }, [analysisData?.handJobId, analysisData?.processedVideoUrl]);
+  }, [analysisData?.handJobId, analysisData?.processedVideoUrl, normalizeApiUrl]);
 
   // Handle seeking to specific timestamp
   const seekToTimestamp = useCallback((timestamp: number) => {

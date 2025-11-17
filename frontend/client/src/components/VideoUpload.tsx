@@ -148,6 +148,7 @@ export default function VideoUpload({ onVideoUpload, onProcessingStart, onProces
               }
               
               // Combine job data with analysis (analysis may be null if AI failed)
+              const sessionParam = session ? `?session=${session}` : '';
               const combinedData = {
                 handJobId,
                 aiJobId: handJobId,
@@ -158,7 +159,7 @@ export default function VideoUpload({ onVideoUpload, onProcessingStart, onProces
                   robot_notes: 'Hand tracking completed successfully, but AI analysis failed or is unavailable.',
                   confidence: 0
                 },
-                processedVideoUrl: `/hand/video/${handJobId}`,
+                processedVideoUrl: apiUrl(`hand/video/${handJobId}${sessionParam}`),
                 trackingData: `/hand/tracking/${handJobId}`,
                 robotCommands: `/hand/commands/${handJobId}`,
               };
