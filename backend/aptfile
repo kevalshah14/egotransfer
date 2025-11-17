@@ -2,6 +2,10 @@ libgl1-mesa-glx
 libglib2.0-0
 libsm6
 libxext6
-libxrender-dev
+libxrender1
 libgomp1
 libgthread-2.0-0
+libice6
+libx11-6
+ffmpeg
+libavcodec-extra
