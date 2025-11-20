@@ -262,9 +262,9 @@ export default function VideoUpload({ onVideoUpload, onProcessingStart, onProces
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: { 
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-          frameRate: { ideal: 30, max: 30 },
+          width: { ideal: 1280, max: 1920 },
+          height: { ideal: 720, max: 1080 },
+          frameRate: 30,
           facingMode: 'user'
         },
         audio: {
@@ -280,12 +280,27 @@ export default function VideoUpload({ onVideoUpload, onProcessingStart, onProces
       
       // Log the actual constraints we got
       const videoTrack = mediaStream.getVideoTracks()[0];
-      const settings = videoTrack.getSettings();
+      const audioTrack = mediaStream.getAudioTracks()[0];
+      const videoSettings = videoTrack.getSettings();
+      const audioSettings = audioTrack?.getSettings();
+      
       console.log('Camera settings:', {
-        width: settings.width,
-        height: settings.height,
-        frameRate: settings.frameRate
+        video: {
+          width: videoSettings.width,
+          height: videoSettings.height,
+          frameRate: videoSettings.frameRate,
+          aspectRatio: videoSettings.aspectRatio
+        },
+        audio: {
+          sampleRate: audioSettings?.sampleRate,
+          channelCount: audioSettings?.channelCount
+        }
       });
+      
+      // Verify framerate
+      if (videoSettings.frameRate && videoSettings.frameRate !== 30) {
+        console.warn('Camera framerate is', videoSettings.frameRate, 'fps, expected 30 fps');
+      }
     } catch (error) {
       console.error('Error accessing camera:', error);
       toast({
@@ -309,24 +324,31 @@ export default function VideoUpload({ onVideoUpload, onProcessingStart, onProces
   const startRecording = () => {
     if (!stream) return;
 
-    // Try different codec options for better compatibility and timing
+    // Try codec options in order of preference
     let mediaRecorder: MediaRecorder | null = null;
     let recordedMimeType = '';
     
-    // Try VP8 first (better compatibility than VP9 for timing)
     const codecOptions = [
-      { mimeType: 'video/webm;codecs=vp8,opus' },
-      { mimeType: 'video/webm;codecs=vp8' },
-      { mimeType: 'video/webm' },
-      {} // Default
+      'video/webm;codecs=vp9,opus',
+      'video/webm;codecs=vp8,opus', 
+      'video/webm;codecs=vp9',
+      'video/webm;codecs=vp8',
+      'video/webm',
+      '' // Default fallback
     ];
     
-    for (const options of codecOptions) {
+    for (const mimeType of codecOptions) {
       try {
-        if (!options.mimeType || MediaRecorder.isTypeSupported(options.mimeType)) {
+        if (mimeType === '' || MediaRecorder.isTypeSupported(mimeType)) {
+          // Use higher bitrate for 720p recording (5 Mbps video)
+          const options = mimeType ? { 
+            mimeType, 
+            videoBitsPerSecond: 5000000,
+            audioBitsPerSecond: 128000
+          } : {};
           mediaRecorder = new MediaRecorder(stream, options);
           recordedMimeType = mediaRecorder.mimeType;
-          console.log('Using MediaRecorder with:', recordedMimeType);
+          console.log('Using MediaRecorder with codec:', recordedMimeType || 'default');
           break;
         }
       } catch (e) {
@@ -335,12 +357,19 @@ export default function VideoUpload({ onVideoUpload, onProcessingStart, onProces
     }
     
     if (!mediaRecorder) {
+      console.error('Failed to create MediaRecorder');
       toast({
         title: "Recording not supported",
         description: "Your browser doesn't support video recording",
         variant: "destructive"
       });
       return;
+    }
+    
+    // Ensure we have a mimeType (fallback if empty)
+    if (!recordedMimeType) {
+      recordedMimeType = 'video/webm';
+      console.log('MimeType was empty, defaulting to:', recordedMimeType);
     }
       
     mediaRecorderRef.current = mediaRecorder;
@@ -358,7 +387,7 @@ export default function VideoUpload({ onVideoUpload, onProcessingStart, onProces
       }
     };
 
-    mediaRecorder.onstop = () => {
+    mediaRecorder.onstop = async () => {
       const recordingDuration = (Date.now() - startTime) / 1000;
       console.log('Recording stopped. Duration:', recordingDuration.toFixed(2), 'seconds');
       console.log('Total chunks:', chunks.length);
@@ -373,12 +402,56 @@ export default function VideoUpload({ onVideoUpload, onProcessingStart, onProces
         return;
       }
       
-      // Use the actual mimeType from MediaRecorder to ensure proper playback
-      const blob = new Blob(chunks, { type: recordedMimeType });
+      // Create initial blob
+      let blob = new Blob(chunks, { type: recordedMimeType });
       console.log('Created blob:', blob.size, 'bytes, type:', recordedMimeType);
       console.log('Approximate bitrate:', (blob.size * 8 / recordingDuration / 1000).toFixed(2), 'kbps');
       
-      const file = new File([blob], `recording-${Date.now()}.webm`, { type: recordedMimeType });
+      // Fix WebM duration if needed
+      if (recordedMimeType.includes('webm')) {
+        console.log('Attempting to fix WebM duration...');
+        blob = await fixWebmDuration(blob, recordingDuration);
+      }
+      
+      // Create a temporary video element to verify the recording duration
+      const tempVideo = document.createElement('video');
+      const blobUrl = URL.createObjectURL(blob);
+      tempVideo.src = blobUrl;
+      
+      tempVideo.onloadedmetadata = () => {
+        console.log('Video metadata loaded:');
+        console.log('- Duration from metadata:', tempVideo.duration.toFixed(2), 'seconds');
+        console.log('- Video width:', tempVideo.videoWidth);
+        console.log('- Video height:', tempVideo.videoHeight);
+        console.log('- Playback rate:', tempVideo.playbackRate);
+        console.log('- Default playback rate:', tempVideo.defaultPlaybackRate);
+        console.log('- Expected duration:', recordingDuration.toFixed(2), 'seconds');
+        console.log('- Duration difference:', Math.abs(tempVideo.duration - recordingDuration).toFixed(2), 'seconds');
+        
+        if (!isFinite(tempVideo.duration) || Math.abs(tempVideo.duration - recordingDuration) > 0.5) {
+          console.error('⚠️ Duration mismatch! Video duration:', tempVideo.duration, 'Expected:', recordingDuration);
+          console.error('This indicates a timing/encoding issue in the recorded video');
+        } else {
+          console.log('✅ Duration matches expected recording time');
+        }
+        
+        URL.revokeObjectURL(blobUrl);
+      };
+      
+      // Determine file extension based on mime type
+      let fileExtension = 'webm';
+      if (recordedMimeType.includes('mp4')) {
+        fileExtension = 'mp4';
+      } else if (recordedMimeType.includes('webm')) {
+        fileExtension = 'webm';
+      }
+      
+      const file = new File([blob], `recording-${Date.now()}.${fileExtension}`, { 
+        type: recordedMimeType,
+        lastModified: Date.now()
+      });
+      
+      console.log('Created file:', file.name, 'size:', file.size, 'type:', file.type);
       setUploadedFile(file);
       setIsReadyToAnalyze(true);
       setRecordedChunks([]);
@@ -398,10 +471,9 @@ export default function VideoUpload({ onVideoUpload, onProcessingStart, onProces
       console.log('MediaRecorder started successfully');
     };
 
-    // Start recording with a longer timeslice (10 seconds) to ensure data collection
-    // without causing speed issues from too-frequent chunking
-    mediaRecorder.start(10000);
-    console.log('Recording started with 10s timeslice');
+    // Start recording with 1-second timeslice for stability
+    mediaRecorder.start(1000);
+    console.log('Recording started with 1s timeslice');
     setIsRecording(true);
     setRecordingTime(0);
     
@@ -414,18 +486,9 @@ export default function VideoUpload({ onVideoUpload, onProcessingStart, onProces
   const stopRecording = () => {
     if (mediaRecorderRef.current && isRecording) {
       console.log('Stopping recording...');
-      // Request any remaining data before stopping
       if (mediaRecorderRef.current.state === 'recording') {
-        // Request final data chunk
-        mediaRecorderRef.current.requestData();
-        console.log('Requested final data chunk');
-        // Small delay to ensure data is emitted before stopping
-        setTimeout(() => {
-          if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-            mediaRecorderRef.current.stop();
-            console.log('MediaRecorder stopped');
-          }
-        }, 100);
+        mediaRecorderRef.current.stop();
+        console.log('MediaRecorder stopped');
       }
       setIsRecording(false);
       if (recordingIntervalRef.current) {
@@ -438,6 +501,43 @@ export default function VideoUpload({ onVideoUpload, onProcessingStart, onProces
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Fix WebM duration metadata
+  const fixWebmDuration = async (blob: Blob, duration: number): Promise<Blob> => {
+    try {
+      const arrayBuffer = await blob.arrayBuffer();
+      const view = new DataView(arrayBuffer);
+      
+      // Find and patch duration in WebM
+      // This is a simplified approach - looks for duration segment
+      const bytes = new Uint8Array(arrayBuffer);
+      
+      // WebM duration is stored in milliseconds as a float64
+      const durationMs = duration * 1000;
+      
+      // Look for Duration element (0x4489) in WebM
+      for (let i = 0; i < bytes.length - 12; i++) {
+        // Check for Duration element marker
+        if (bytes[i] === 0x44 && bytes[i + 1] === 0x89) {
+          // Found duration marker, check if it's unset (0.0 or needs update)
+          const currentDuration = view.getFloat64(i + 4, false);
+          
+          if (currentDuration === 0 || !isFinite(currentDuration)) {
+            // Patch the duration
+            view.setFloat64(i + 4, durationMs, false);
+            console.log('Patched WebM duration:', durationMs, 'ms');
+            return new Blob([arrayBuffer], { type: blob.type });
+          }
+        }
+      }
+      
+      console.log('Duration element not found or already set, returning original blob');
+      return blob;
+    } catch (error) {
+      console.error('Failed to fix WebM duration:', error);
+      return blob;
+    }
   };
 
   const switchMode = (newMode: 'upload' | 'record') => {

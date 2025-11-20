@@ -87,6 +87,16 @@ class VideoHandProcessor:
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         
+        # Validate video properties
+        if width <= 0 or height <= 0:
+            print(f"Error: Invalid video dimensions: {width}x{height}")
+            cap.release()
+            raise ValueError(f"Invalid video dimensions: {width}x{height}. Video may be corrupted or have invalid metadata.")
+        
+        if fps <= 0:
+            print(f"Warning: Invalid FPS ({fps}), defaulting to 30")
+            fps = 30
+        
         print(f"Processing video: {width}x{height} @ {fps}FPS, {total_frames} frames")
         
         # Calculate output dimensions with 16:9 aspect ratio
