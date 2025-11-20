@@ -264,14 +264,28 @@ export default function VideoUpload({ onVideoUpload, onProcessingStart, onProces
         video: { 
           width: { ideal: 1920 },
           height: { ideal: 1080 },
+          frameRate: { ideal: 30, max: 30 },
           facingMode: 'user'
         },
-        audio: true
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          sampleRate: 44100
+        }
       });
       setStream(mediaStream);
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
       }
+      
+      // Log the actual constraints we got
+      const videoTrack = mediaStream.getVideoTracks()[0];
+      const settings = videoTrack.getSettings();
+      console.log('Camera settings:', {
+        width: settings.width,
+        height: settings.height,
+        frameRate: settings.frameRate
+      });
     } catch (error) {
       console.error('Error accessing camera:', error);
       toast({
@@ -295,32 +309,60 @@ export default function VideoUpload({ onVideoUpload, onProcessingStart, onProces
   const startRecording = () => {
     if (!stream) return;
 
-    const options = { mimeType: 'video/webm;codecs=vp9' };
-    let mediaRecorder: MediaRecorder;
+    // Try different codec options for better compatibility and timing
+    let mediaRecorder: MediaRecorder | null = null;
+    let recordedMimeType = '';
     
-    try {
-      mediaRecorder = new MediaRecorder(stream, options);
-    } catch (e) {
-      // Fallback for browsers that don't support vp9
+    // Try VP8 first (better compatibility than VP9 for timing)
+    const codecOptions = [
+      { mimeType: 'video/webm;codecs=vp8,opus' },
+      { mimeType: 'video/webm;codecs=vp8' },
+      { mimeType: 'video/webm' },
+      {} // Default
+    ];
+    
+    for (const options of codecOptions) {
       try {
-        mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
-      } catch (e2) {
-        mediaRecorder = new MediaRecorder(stream);
+        if (!options.mimeType || MediaRecorder.isTypeSupported(options.mimeType)) {
+          mediaRecorder = new MediaRecorder(stream, options);
+          recordedMimeType = mediaRecorder.mimeType;
+          console.log('Using MediaRecorder with:', recordedMimeType);
+          break;
+        }
+      } catch (e) {
+        continue;
       }
     }
-
+    
+    if (!mediaRecorder) {
+      toast({
+        title: "Recording not supported",
+        description: "Your browser doesn't support video recording",
+        variant: "destructive"
+      });
+      return;
+    }
+      
     mediaRecorderRef.current = mediaRecorder;
     const chunks: Blob[] = [];
+    const startTime = Date.now();
 
     mediaRecorder.ondataavailable = (event) => {
+      console.log('ondataavailable fired, data size:', event.data?.size || 0);
       if (event.data && event.data.size > 0) {
-        console.log('Recording chunk received:', event.data.size, 'bytes');
+        console.log('Recording chunk received:', event.data.size, 'bytes at', new Date().toISOString());
         chunks.push(event.data);
+        console.log('Total chunks so far:', chunks.length);
+      } else {
+        console.warn('Received empty data chunk');
       }
     };
 
     mediaRecorder.onstop = () => {
-      console.log('Recording stopped. Total chunks:', chunks.length);
+      const recordingDuration = (Date.now() - startTime) / 1000;
+      console.log('Recording stopped. Duration:', recordingDuration.toFixed(2), 'seconds');
+      console.log('Total chunks:', chunks.length);
+      
       if (chunks.length === 0) {
         console.error('No recording data collected!');
         toast({
@@ -331,9 +373,12 @@ export default function VideoUpload({ onVideoUpload, onProcessingStart, onProces
         return;
       }
       
-      const blob = new Blob(chunks, { type: 'video/webm' });
-      console.log('Created blob:', blob.size, 'bytes');
-      const file = new File([blob], `recording-${Date.now()}.webm`, { type: 'video/webm' });
+      // Use the actual mimeType from MediaRecorder to ensure proper playback
+      const blob = new Blob(chunks, { type: recordedMimeType });
+      console.log('Created blob:', blob.size, 'bytes, type:', recordedMimeType);
+      console.log('Approximate bitrate:', (blob.size * 8 / recordingDuration / 1000).toFixed(2), 'kbps');
+      
+      const file = new File([blob], `recording-${Date.now()}.webm`, { type: recordedMimeType });
       setUploadedFile(file);
       setIsReadyToAnalyze(true);
       setRecordedChunks([]);
@@ -349,9 +394,14 @@ export default function VideoUpload({ onVideoUpload, onProcessingStart, onProces
       });
     };
 
-    // Start recording with timeslice to ensure data is collected periodically (every 100ms)
-    mediaRecorder.start(100);
-    console.log('Recording started with timeslice=100ms');
+    mediaRecorder.onstart = () => {
+      console.log('MediaRecorder started successfully');
+    };
+
+    // Start recording with a longer timeslice (10 seconds) to ensure data collection
+    // without causing speed issues from too-frequent chunking
+    mediaRecorder.start(10000);
+    console.log('Recording started with 10s timeslice');
     setIsRecording(true);
     setRecordingTime(0);
     
@@ -366,7 +416,16 @@ export default function VideoUpload({ onVideoUpload, onProcessingStart, onProces
       console.log('Stopping recording...');
       // Request any remaining data before stopping
       if (mediaRecorderRef.current.state === 'recording') {
-        mediaRecorderRef.current.stop();
+        // Request final data chunk
+        mediaRecorderRef.current.requestData();
+        console.log('Requested final data chunk');
+        // Small delay to ensure data is emitted before stopping
+        setTimeout(() => {
+          if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+            mediaRecorderRef.current.stop();
+            console.log('MediaRecorder stopped');
+          }
+        }, 100);
       }
       setIsRecording(false);
       if (recordingIntervalRef.current) {
@@ -479,19 +538,19 @@ export default function VideoUpload({ onVideoUpload, onProcessingStart, onProces
                       autoPlay
                       playsInline
                       muted
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-contain"
                     />
                     
                     {/* Recording Controls Overlay */}
                     <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black/80 to-transparent">
                       <div className="flex items-center justify-between">
                         {/* Recording Time */}
-                        {isRecording && (
+                    {isRecording && (
                           <div className="flex items-center gap-2">
                             <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
                             <span className="text-white font-mono text-lg">{formatRecordingTime(recordingTime)}</span>
-                          </div>
-                        )}
+                      </div>
+                    )}
                         
                         {!isRecording && <div></div>}
                         
