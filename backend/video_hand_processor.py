@@ -82,7 +82,7 @@ class VideoHandProcessor:
             return False
             
         # Get video properties
-        fps = int(cap.get(cv2.CAP_PROP_FPS))
+        fps = cap.get(cv2.CAP_PROP_FPS)
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -93,9 +93,15 @@ class VideoHandProcessor:
             cap.release()
             raise ValueError(f"Invalid video dimensions: {width}x{height}. Video may be corrupted or have invalid metadata.")
         
-        if fps <= 0:
+        # Normalize FPS - some recorded videos report invalid or extreme values
+        if fps is None or fps <= 0:
             print(f"Warning: Invalid FPS ({fps}), defaulting to 30")
-            fps = 30
+            fps = 30.0
+        elif fps > 120:
+            print(f"Warning: Unusually high FPS detected ({fps:.2f}), clamping to 30")
+            fps = 30.0
+        else:
+            fps = float(fps)
         
         print(f"Processing video: {width}x{height} @ {fps}FPS, {total_frames} frames")
         
@@ -309,7 +315,7 @@ class VideoHandProcessor:
         
         return canvas
     
-    def _process_frame(self, frame: np.ndarray, frame_number: int, fps: int) -> Tuple[np.ndarray, Optional[HandFrame]]:
+    def _process_frame(self, frame: np.ndarray, frame_number: int, fps: float) -> Tuple[np.ndarray, Optional[HandFrame]]:
         """
         Process a single frame for hand detection and tracking.
         

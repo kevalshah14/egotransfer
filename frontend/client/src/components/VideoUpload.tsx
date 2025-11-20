@@ -503,37 +503,112 @@ export default function VideoUpload({ onVideoUpload, onProcessingStart, onProces
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Fix WebM duration metadata
+  // Fix WebM duration metadata using ts-ebml approach
   const fixWebmDuration = async (blob: Blob, duration: number): Promise<Blob> => {
     try {
       const arrayBuffer = await blob.arrayBuffer();
-      const view = new DataView(arrayBuffer);
-      
-      // Find and patch duration in WebM
-      // This is a simplified approach - looks for duration segment
       const bytes = new Uint8Array(arrayBuffer);
       
-      // WebM duration is stored in milliseconds as a float64
-      const durationMs = duration * 1000;
+      console.log('Searching for WebM Info segment...');
       
-      // Look for Duration element (0x4489) in WebM
-      for (let i = 0; i < bytes.length - 12; i++) {
-        // Check for Duration element marker
-        if (bytes[i] === 0x44 && bytes[i + 1] === 0x89) {
-          // Found duration marker, check if it's unset (0.0 or needs update)
-          const currentDuration = view.getFloat64(i + 4, false);
-          
-          if (currentDuration === 0 || !isFinite(currentDuration)) {
-            // Patch the duration
-            view.setFloat64(i + 4, durationMs, false);
-            console.log('Patched WebM duration:', durationMs, 'ms');
-            return new Blob([arrayBuffer], { type: blob.type });
-          }
+      // WebM/EBML structure:
+      // We need to find the Info segment and add/update the Duration element
+      // Info segment ID: 0x1549A966
+      // Duration element ID: 0x4489
+      
+      // Search for Info segment
+      let infoStart = -1;
+      for (let i = 0; i < bytes.length - 4; i++) {
+        if (bytes[i] === 0x15 && bytes[i + 1] === 0x49 && 
+            bytes[i + 2] === 0xA9 && bytes[i + 3] === 0x66) {
+          infoStart = i;
+          console.log('Found Info segment at position:', infoStart);
+          break;
         }
       }
       
-      console.log('Duration element not found or already set, returning original blob');
-      return blob;
+      if (infoStart === -1) {
+        console.warn('Info segment not found, cannot fix duration');
+        return blob;
+      }
+      
+      // Read Info segment size (EBML variable-size integer)
+      let infoSize = 0;
+      let sizeBytesCount = 0;
+      const firstSizeByte = bytes[infoStart + 4];
+      
+      // Simple size reading (handles up to 2-byte sizes)
+      if ((firstSizeByte & 0x80) !== 0) {
+        infoSize = firstSizeByte & 0x7F;
+        sizeBytesCount = 1;
+      } else if ((firstSizeByte & 0x40) !== 0) {
+        infoSize = ((firstSizeByte & 0x3F) << 8) | bytes[infoStart + 5];
+        sizeBytesCount = 2;
+      }
+      
+      console.log('Info segment size:', infoSize, 'bytes');
+      
+      const infoEnd = infoStart + 4 + sizeBytesCount + infoSize;
+      
+      // Search for Duration element within Info segment
+      let durationPos = -1;
+      for (let i = infoStart; i < infoEnd - 2; i++) {
+        if (bytes[i] === 0x44 && bytes[i + 1] === 0x89) {
+          durationPos = i;
+          console.log('Found Duration element at position:', durationPos);
+          break;
+        }
+      }
+      
+      // Create new array with patched duration
+      const durationMs = duration * 1000;
+      const durationFloat = new Float64Array([durationMs]);
+      const durationBytes = new Uint8Array(durationFloat.buffer);
+      
+      // Reverse bytes for big-endian
+      const durationBE = new Uint8Array(8);
+      for (let i = 0; i < 8; i++) {
+        durationBE[i] = durationBytes[7 - i];
+      }
+      
+      let patchedBytes: Uint8Array;
+      
+      if (durationPos !== -1) {
+        // Duration element exists, patch it
+        patchedBytes = new Uint8Array(bytes);
+        // Duration element: 0x44 0x89 0x88 [8 bytes float]
+        // Position after 0x44 0x89 0x88 is where float starts
+        const floatStart = durationPos + 3;
+        for (let i = 0; i < 8; i++) {
+          patchedBytes[floatStart + i] = durationBE[i];
+        }
+        console.log('Patched existing Duration element with:', durationMs, 'ms');
+      } else {
+        // Duration element doesn't exist, need to add it
+        // Insert after Info segment header: [Info ID (4)] [Size (1-8)] [Insert here]
+        const insertPos = infoStart + 4 + sizeBytesCount;
+        
+        // Duration element: 0x44 0x89 (ID) 0x88 (size = 8 bytes) [8 bytes float]
+        const durationElement = new Uint8Array(11);
+        durationElement[0] = 0x44;
+        durationElement[1] = 0x89;
+        durationElement[2] = 0x88;
+        durationElement.set(durationBE, 3);
+        
+        patchedBytes = new Uint8Array(bytes.length + durationElement.length);
+        patchedBytes.set(bytes.slice(0, insertPos));
+        patchedBytes.set(durationElement, insertPos);
+        patchedBytes.set(bytes.slice(insertPos), insertPos + durationElement.length);
+        
+        console.log('Inserted new Duration element with:', durationMs, 'ms');
+      }
+      
+      // Create a new ArrayBuffer and copy the patched bytes
+      const newBuffer = new ArrayBuffer(patchedBytes.length);
+      const newBytes = new Uint8Array(newBuffer);
+      newBytes.set(patchedBytes);
+      
+      return new Blob([newBuffer], { type: blob.type });
     } catch (error) {
       console.error('Failed to fix WebM duration:', error);
       return blob;
