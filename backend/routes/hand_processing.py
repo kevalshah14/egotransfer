@@ -61,7 +61,7 @@ async def process_video_hand_tracking(
         user_id = current_user["id"] if current_user else None
         
         # Validate file type
-        allowed_extensions = {'.mp4', '.avi', '.mov', '.mkv'}
+        allowed_extensions = {'.mp4', '.avi', '.mov', '.mkv', '.webm'}
         file_extension = Path(file.filename).suffix.lower()
         
         if file_extension not in allowed_extensions:

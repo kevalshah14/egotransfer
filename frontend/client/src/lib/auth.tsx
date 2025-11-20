@@ -92,14 +92,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setLoading(false);
         return Promise.resolve();
       } else if (response.status === 401) {
-        console.warn("Session invalid (401)");
-        // Session invalid, clear it
+        console.warn("Session invalid (401) - clearing auth state");
+        // Session invalid, clear it - this is a normal state, not an error
         localStorage.removeItem("auth_session");
         localStorage.removeItem("auth_token");
         setSession(null);
         setUser(null);
         setLoading(false);
-        return Promise.reject(new Error("Session invalid"));
+        return Promise.resolve(); // Resolve instead of reject - invalid session is expected
       } else {
         console.error("Unexpected response status:", response.status);
         setLoading(false);

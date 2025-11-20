@@ -1,5 +1,5 @@
-import { useState, useRef } from 'react';
-import { Video, CheckCircle, Play } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { Video, CheckCircle, Play, Camera, StopCircle, Upload } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useMutation } from '@tanstack/react-query';
 import { apiUrl } from '@/lib/config';
@@ -49,6 +49,16 @@ export default function VideoUpload({ onVideoUpload, onProcessingStart, onProces
   const [eta, setEta] = useState('');
   const [isReadyToAnalyze, setIsReadyToAnalyze] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Recording state
+  const [mode, setMode] = useState<'upload' | 'record'>('upload');
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordedChunks, setRecordedChunks] = useState<Blob[]>([]);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const [stream, setStream] = useState<MediaStream | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -247,6 +257,159 @@ export default function VideoUpload({ onVideoUpload, onProcessingStart, onProces
     fileInputRef.current?.click();
   };
 
+  // Recording functions
+  const startCamera = async () => {
+    try {
+      const mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: { 
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+          facingMode: 'user'
+        },
+        audio: true
+      });
+      setStream(mediaStream);
+      if (videoRef.current) {
+        videoRef.current.srcObject = mediaStream;
+      }
+    } catch (error) {
+      console.error('Error accessing camera:', error);
+      toast({
+        title: "Camera access denied",
+        description: "Please allow camera access to record video",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const stopCamera = () => {
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop());
+      setStream(null);
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+  };
+
+  const startRecording = () => {
+    if (!stream) return;
+
+    const options = { mimeType: 'video/webm;codecs=vp9' };
+    let mediaRecorder: MediaRecorder;
+    
+    try {
+      mediaRecorder = new MediaRecorder(stream, options);
+    } catch (e) {
+      // Fallback for browsers that don't support vp9
+      try {
+        mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+      } catch (e2) {
+        mediaRecorder = new MediaRecorder(stream);
+      }
+    }
+
+    mediaRecorderRef.current = mediaRecorder;
+    const chunks: Blob[] = [];
+
+    mediaRecorder.ondataavailable = (event) => {
+      if (event.data && event.data.size > 0) {
+        console.log('Recording chunk received:', event.data.size, 'bytes');
+        chunks.push(event.data);
+      }
+    };
+
+    mediaRecorder.onstop = () => {
+      console.log('Recording stopped. Total chunks:', chunks.length);
+      if (chunks.length === 0) {
+        console.error('No recording data collected!');
+        toast({
+          title: "Recording failed",
+          description: "No video data was captured. Please try again.",
+          variant: "destructive"
+        });
+        return;
+      }
+      
+      const blob = new Blob(chunks, { type: 'video/webm' });
+      console.log('Created blob:', blob.size, 'bytes');
+      const file = new File([blob], `recording-${Date.now()}.webm`, { type: 'video/webm' });
+      setUploadedFile(file);
+      setIsReadyToAnalyze(true);
+      setRecordedChunks([]);
+      stopCamera();
+    };
+
+    mediaRecorder.onerror = (event: any) => {
+      console.error('MediaRecorder error:', event);
+      toast({
+        title: "Recording error",
+        description: "An error occurred during recording",
+        variant: "destructive"
+      });
+    };
+
+    // Start recording with timeslice to ensure data is collected periodically (every 100ms)
+    mediaRecorder.start(100);
+    console.log('Recording started with timeslice=100ms');
+    setIsRecording(true);
+    setRecordingTime(0);
+    
+    // Update recording time every second
+    recordingIntervalRef.current = setInterval(() => {
+      setRecordingTime(prev => prev + 1);
+    }, 1000);
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      console.log('Stopping recording...');
+      // Request any remaining data before stopping
+      if (mediaRecorderRef.current.state === 'recording') {
+        mediaRecorderRef.current.stop();
+      }
+      setIsRecording(false);
+      if (recordingIntervalRef.current) {
+        clearInterval(recordingIntervalRef.current);
+      }
+    }
+  };
+
+  const formatRecordingTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const switchMode = (newMode: 'upload' | 'record') => {
+    if (newMode === mode) return;
+    
+    // Clean up when switching modes
+    if (mode === 'record') {
+      stopCamera();
+      if (isRecording) {
+        stopRecording();
+      }
+    }
+    setUploadedFile(null);
+    setIsReadyToAnalyze(false);
+    setMode(newMode);
+    
+    if (newMode === 'record') {
+      startCamera();
+    }
+  };
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      stopCamera();
+      if (recordingIntervalRef.current) {
+        clearInterval(recordingIntervalRef.current);
+      }
+    };
+  }, []);
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-black to-slate-900 flex items-center justify-center p-4 relative overflow-hidden page-transition">
       {/* Atmospheric Background */}
@@ -258,26 +421,105 @@ export default function VideoUpload({ onVideoUpload, onProcessingStart, onProces
       
       <div className="max-w-xl w-full space-elegant relative z-10">
 
+        {/* Mode Switcher */}
+        {!isProcessing && !isReadyToAnalyze && (
+          <div className="glass-card rounded-2xl p-2 flex gap-2 mb-6">
+            <button
+              onClick={() => switchMode('upload')}
+              className={cn(
+                "flex-1 px-6 py-3 rounded-xl transition-all duration-300 flex items-center justify-center gap-2",
+                mode === 'upload' 
+                  ? "glass-strong text-white shadow-lg" 
+                  : "text-white/50 hover:text-white/70"
+              )}
+            >
+              <Upload className="h-4 w-4" />
+              <span className="font-light">Upload</span>
+            </button>
+            <button
+              onClick={() => switchMode('record')}
+              className={cn(
+                "flex-1 px-6 py-3 rounded-xl transition-all duration-300 flex items-center justify-center gap-2",
+                mode === 'record' 
+                  ? "glass-strong text-white shadow-lg" 
+                  : "text-white/50 hover:text-white/70"
+              )}
+            >
+              <Camera className="h-4 w-4" />
+              <span className="font-light">Record</span>
+            </button>
+          </div>
+        )}
+
         {/* Main Upload Glass */}
         <div className="text-center space-elegant">
           {!isProcessing ? (
             <div>
               <div
                 className={cn(
-                  "relative cursor-pointer rounded-3xl overflow-hidden group",
-                  "glass-ultra liquid-hover fluid-transform",
+                  "relative rounded-3xl overflow-hidden group",
+                  "glass-ultra",
+                  mode === 'upload' && !uploadedFile && "cursor-pointer liquid-hover fluid-transform",
                   isDragging && "scale-105",
                   uploadedFile ? "glass-strong" : "",
                   isReadyToAnalyze && "pointer-events-none"
                 )}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-                onClick={!isReadyToAnalyze ? openFileDialog : undefined}
+                onDragOver={mode === 'upload' ? handleDragOver : undefined}
+                onDragLeave={mode === 'upload' ? handleDragLeave : undefined}
+                onDrop={mode === 'upload' ? handleDrop : undefined}
+                onClick={mode === 'upload' && !isReadyToAnalyze && !uploadedFile ? openFileDialog : undefined}
                 data-testid="upload-area"
               >
-              <div className="p-20 text-center">
-                {uploadedFile ? (
+              <div className={cn("text-center", mode === 'record' ? "p-0" : "p-20")}>
+                {mode === 'record' ? (
+                  /* Recording Mode */
+                  <div className="relative aspect-video bg-black/50">
+                    <video
+                      ref={videoRef}
+                      autoPlay
+                      playsInline
+                      muted
+                      className="w-full h-full object-cover"
+                    />
+                    
+                    {/* Recording Controls Overlay */}
+                    <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black/80 to-transparent">
+                      <div className="flex items-center justify-between">
+                        {/* Recording Time */}
+                        {isRecording && (
+                          <div className="flex items-center gap-2">
+                            <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
+                            <span className="text-white font-mono text-lg">{formatRecordingTime(recordingTime)}</span>
+                          </div>
+                        )}
+                        
+                        {!isRecording && <div></div>}
+                        
+                        {/* Record/Stop Button */}
+                        <button
+                          onClick={isRecording ? stopRecording : startRecording}
+                          disabled={!stream}
+                          className={cn(
+                            "p-4 rounded-full transition-all duration-300",
+                            isRecording 
+                              ? "bg-red-500 hover:bg-red-600" 
+                              : "bg-white hover:bg-white/90",
+                            !stream && "opacity-50 cursor-not-allowed"
+                          )}
+                        >
+                          {isRecording ? (
+                            <StopCircle className="h-6 w-6 text-white" />
+                          ) : (
+                            <div className="h-6 w-6 bg-red-500 rounded-full"></div>
+                          )}
+                        </button>
+                        
+                        <div></div>
+                      </div>
+                    </div>
+                  </div>
+                ) : uploadedFile ? (
+                  /* File Selected */
                   <div className="space-y-6">
                     <div className="relative">
                       <CheckCircle className="h-20 w-20 text-emerald-400 mx-auto drop-shadow-lg" />
@@ -289,6 +531,7 @@ export default function VideoUpload({ onVideoUpload, onProcessingStart, onProces
                     </div>
                   </div>
                 ) : (
+                  /* Upload Mode */
                 <div className="space-y-6">
                   <div className="relative">
                     {isUploading ? (
@@ -334,13 +577,13 @@ export default function VideoUpload({ onVideoUpload, onProcessingStart, onProces
                         </div>
                       </div>
                     ) : !isUploading && (
-                      <p className="text-white/40 text-xs font-light tracking-widest uppercase">MP4 · MOV · AVI</p>
+                      <p className="text-white/40 text-xs font-light tracking-widest uppercase">MP4 · MOV · AVI · WEBM</p>
                     )}
                   </div>
                 </div>
               )}
-            </div>
-              </div>
+                  </div>
+                </div>
 
               {/* Begin Analysis Button */}
               {isReadyToAnalyze && uploadedFile && (
