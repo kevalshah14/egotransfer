@@ -28,6 +28,13 @@ class UserService:
         picture: Optional[str] = None
     ) -> User:
         """Get existing user or create a new one."""
+        import os
+        
+        # Check if email is in admin list
+        admin_emails = os.getenv("ADMIN_EMAILS", "").split(",")
+        admin_emails = [e.strip().lower() for e in admin_emails if e.strip()]
+        is_admin = email.lower() in admin_emails
+        
         # Try to get existing user
         result = await db.execute(select(User).where(User.id == user_id))
         user = result.scalar_one_or_none()
@@ -41,6 +48,10 @@ class UserService:
                 user.name = name
             if picture:
                 user.picture = picture
+            # Update admin status if email is in admin list
+            if is_admin and not user.is_admin:
+                user.is_admin = True
+                logger.info(f"Granted admin access to: {email}")
         else:
             # Create new user
             user = User(
@@ -50,10 +61,11 @@ class UserService:
                 picture=picture,
                 created_at=datetime.utcnow(),
                 last_login=datetime.utcnow(),
-                login_count=1
+                login_count=1,
+                is_admin=is_admin
             )
             db.add(user)
-            logger.info(f"Created new user: {email}")
+            logger.info(f"Created new user: {email} (admin: {is_admin})")
         
         await db.commit()
         await db.refresh(user)

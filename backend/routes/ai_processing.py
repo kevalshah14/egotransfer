@@ -12,6 +12,7 @@ from pathlib import Path
 from models.schemas import ProcessingJob, AIAnalysisResult, ProcessingResponse
 from services.ai_service import AIService, get_ai_service
 from services.job_manager import JobManager, get_job_manager
+from services.video_service import VideoService
 from routes.auth import get_current_user_optional
 
 logger = logging.getLogger(__name__)
@@ -128,8 +129,30 @@ async def analyze_video_with_ai(
         upload_path.parent.mkdir(exist_ok=True)
         
         content = await file.read()
+        file_size = len(content)
+        
         with open(upload_path, 'wb') as f:
             f.write(content)
+        
+        # Save video metadata to database (if available)
+        try:
+            from models.database import AsyncSessionLocal
+            if AsyncSessionLocal:
+                async with AsyncSessionLocal() as db:
+                    await VideoService.create_video(
+                        db=db,
+                        video_id=job_id,
+                        filename=f"{job_id}_{file.filename}",
+                        file_path=str(upload_path),
+                        file_size=file_size,
+                        user_id=user_id,
+                        job_id=job_id,
+                        format=file_extension[1:] if file_extension else None,
+                        status="uploaded"
+                    )
+        except Exception as e:
+            # Log error but don't fail the upload if DB save fails
+            logger.warning(f"Failed to save video to database: {e}")
         
         # Start background AI analysis
         background_tasks.add_task(

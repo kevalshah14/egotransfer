@@ -79,6 +79,49 @@ def create_app() -> FastAPI:
         logger.info("Database connections closed")
     
     # Add general jobs endpoints
+    @app.get("/videos")
+    async def get_user_videos(
+        request: Request,
+        current_user: dict = Depends(get_current_user_optional)
+    ):
+        """Get all videos for the current user."""
+        try:
+            from services.video_service import VideoService
+            from models.database import AsyncSessionLocal
+            
+            # Filter videos by user_id if authenticated
+            user_id = current_user["id"] if current_user else None
+            if not user_id:
+                return {"videos": [], "total": 0}
+            
+            if not AsyncSessionLocal:
+                return {"videos": [], "total": 0}
+            
+            async with AsyncSessionLocal() as db:
+                videos = await VideoService.list_videos_by_user(db, user_id, limit=100, offset=0)
+                total_count = await VideoService.count_videos_by_user(db, user_id)
+            
+            return {
+                "videos": [
+                    {
+                        "id": video.id,
+                        "filename": video.filename,
+                        "original_filename": video.original_filename,
+                        "file_size": video.file_size,
+                        "duration": video.duration,
+                        "status": video.status,
+                        "job_id": video.job_id,
+                        "created_at": video.created_at.isoformat() if video.created_at else None,
+                    }
+                    for video in videos
+                ],
+                "total": total_count
+            }
+        except Exception as e:
+            logger.error(f"Failed to get user videos: {e}")
+            # If database not available, return empty list
+            return {"videos": [], "total": 0}
+    
     @app.get("/jobs")
     async def get_all_jobs(
         request: Request,
