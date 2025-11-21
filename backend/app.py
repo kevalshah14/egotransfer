@@ -16,9 +16,10 @@ from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 import logging
 
-from routes import ai_processing, hand_processing, robot_control, auth
+from routes import ai_processing, hand_processing, robot_control, auth, admin
 from routes.auth import get_current_user_optional, get_current_user_required
 from services.job_manager import JobManager, get_job_manager
+from models.database import init_db, close_db
 
 logger = logging.getLogger(__name__)
 
@@ -53,9 +54,29 @@ def create_app() -> FastAPI:
     
     # Include routers
     app.include_router(auth.router)
+    app.include_router(admin.router)
     app.include_router(ai_processing.router)
     app.include_router(hand_processing.router)
     app.include_router(robot_control.router)
+    
+    # Initialize database on startup
+    @app.on_event("startup")
+    async def startup_event():
+        """Initialize database on application startup."""
+        try:
+            await init_db()
+            logger.info("Database initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize database: {e}")
+            # Don't fail startup if DATABASE_URL is not set (for development)
+            if os.getenv("DATABASE_URL"):
+                raise
+    
+    @app.on_event("shutdown")
+    async def shutdown_event():
+        """Close database connections on shutdown."""
+        await close_db()
+        logger.info("Database connections closed")
     
     # Add general jobs endpoints
     @app.get("/jobs")

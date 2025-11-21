@@ -12,8 +12,11 @@ import logging
 import secrets
 import httpx
 from datetime import datetime, timedelta
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from jose import jwt
+from models.database import get_db
+from services.user_service import UserService
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
@@ -26,9 +29,8 @@ BASE_URL = os.getenv("BASE_URL", "http://localhost:3000").rstrip("/")  # Remove 
 JWT_SECRET = os.getenv("JWT_SECRET", secrets.token_urlsafe(32))
 JWT_ALGORITHM = "HS256"
 
-# In-memory session storage (use Redis/DB in production)
+# In-memory OAuth state storage (temporary, only during OAuth flow)
 oauth_sessions = {}
-user_sessions = {}
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
@@ -81,7 +83,8 @@ async def sign_in_google():
 async def google_callback(
     code: Optional[str] = None,
     state: Optional[str] = None,
-    error: Optional[str] = None
+    error: Optional[str] = None,
+    db: AsyncSession = Depends(get_db)
 ):
     """Handle Google OAuth callback."""
     if error:
@@ -120,11 +123,19 @@ async def google_callback(
             user_response.raise_for_status()
             user_info = user_response.json()
         
-        # Create or update user session
+        # Get or create user in database
         user_id = user_info.get("id")
         email = user_info.get("email")
         name = user_info.get("name")
         picture = user_info.get("picture")
+        
+        user = await UserService.get_or_create_user(
+            db=db,
+            user_id=user_id,
+            email=email,
+            name=name,
+            picture=picture
+        )
         
         # Create JWT token
         token_data = {
@@ -135,15 +146,14 @@ async def google_callback(
         }
         access_token = create_access_token(token_data)
         
-        # Store session
+        # Create session in database
         session_id = secrets.token_urlsafe(32)
-        user_sessions[session_id] = {
-            "user_id": user_id,
-            "email": email,
-            "name": name,
-            "picture": picture,
-            "created_at": datetime.utcnow(),
-        }
+        await UserService.create_session(
+            db=db,
+            session_id=session_id,
+            user_id=user_id,
+            expires_in_hours=24
+        )
         
         # Clean up OAuth session
         del oauth_sessions[state]
@@ -182,37 +192,50 @@ async def google_callback(
 
 
 @router.get("/session")
-async def get_session(session: Optional[str] = None):
+async def get_session(
+    session: Optional[str] = None,
+    db: AsyncSession = Depends(get_db)
+):
     """Get current session information."""
     if not session:
         return {"user": None, "session": None}
     
-    if session not in user_sessions:
+    db_session = await UserService.get_session(db, session)
+    if not db_session:
         return {"user": None, "session": None}
     
-    user_data = user_sessions[session]
+    user = await UserService.get_user_by_id(db, db_session.user_id)
+    if not user:
+        return {"user": None, "session": None}
+    
     return {
         "user": {
-            "id": user_data["user_id"],
-            "email": user_data["email"],
-            "name": user_data["name"],
-            "picture": user_data["picture"],
+            "id": user.id,
+            "email": user.email,
+            "name": user.name,
+            "picture": user.picture,
         },
         "session": session,
     }
 
 
 @router.post("/sign-out")
-async def sign_out(session: Optional[str] = None):
+async def sign_out(
+    session: Optional[str] = None,
+    db: AsyncSession = Depends(get_db)
+):
     """Sign out the current user."""
-    if session and session in user_sessions:
-        del user_sessions[session]
+    if session:
+        await UserService.delete_session(db, session)
     
     return {"success": True, "message": "Signed out successfully"}
 
 
 @router.get("/user")
-async def get_current_user(request: Request):
+async def get_current_user(
+    request: Request,
+    db: AsyncSession = Depends(get_db)
+):
     """Get current authenticated user."""
     # Get session from query parameter or cookie
     session = request.query_params.get("session")
@@ -223,20 +246,27 @@ async def get_current_user(request: Request):
     if not session:
         raise HTTPException(status_code=401, detail="Not authenticated")
     
-    if session not in user_sessions:
+    db_session = await UserService.get_session(db, session)
+    if not db_session:
         raise HTTPException(status_code=401, detail="Invalid session")
     
-    user_data = user_sessions[session]
+    user = await UserService.get_user_by_id(db, db_session.user_id)
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+    
     return {
-        "id": user_data["user_id"],
-        "email": user_data["email"],
-        "name": user_data["name"],
-        "picture": user_data["picture"],
+        "id": user.id,
+        "email": user.email,
+        "name": user.name,
+        "picture": user.picture,
     }
 
 
 # Dependency to get current user (optional - returns None if not authenticated)
-async def get_current_user_optional(request: Request) -> Optional[dict]:
+async def get_current_user_optional(
+    request: Request,
+    db: AsyncSession = Depends(get_db)
+) -> Optional[dict]:
     """Get current authenticated user or None if not authenticated."""
     # Get session from query parameter, cookie, or Authorization header
     session = request.query_params.get("session")
@@ -248,22 +278,32 @@ async def get_current_user_optional(request: Request) -> Optional[dict]:
         if auth_header and auth_header.startswith("Bearer "):
             session = auth_header.split(" ")[1]
     
-    if not session or session not in user_sessions:
+    if not session:
         return None
     
-    user_data = user_sessions[session]
+    db_session = await UserService.get_session(db, session)
+    if not db_session:
+        return None
+    
+    user = await UserService.get_user_by_id(db, db_session.user_id)
+    if not user:
+        return None
+    
     return {
-        "id": user_data["user_id"],
-        "email": user_data["email"],
-        "name": user_data["name"],
-        "picture": user_data["picture"],
+        "id": user.id,
+        "email": user.email,
+        "name": user.name,
+        "picture": user.picture,
     }
 
 
 # Dependency to get current user (required - raises exception if not authenticated)
-async def get_current_user_required(request: Request) -> dict:
+async def get_current_user_required(
+    request: Request,
+    db: AsyncSession = Depends(get_db)
+) -> dict:
     """Get current authenticated user or raise 401 if not authenticated."""
-    user = await get_current_user_optional(request)
+    user = await get_current_user_optional(request, db)
     if not user:
         raise HTTPException(
             status_code=401, 

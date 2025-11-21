@@ -78,6 +78,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin API Routes - Proxy to Backend
+  app.get("/api/admin/users", async (req, res) => {
+    try {
+      const session = req.query.session || req.cookies.auth_session;
+      const limit = req.query.limit || 100;
+      const offset = req.query.offset || 0;
+      
+      let url = `${BACKEND_URL}/api/admin/users?limit=${limit}&offset=${offset}`;
+      if (session) {
+        url += `&session=${session}`;
+      }
+      
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Backend responded with status ${response.status}`);
+      }
+      const data = await response.json();
+      res.json(data);
+    } catch (error) {
+      console.error("Admin users error:", error);
+      res.status(500).json({ error: "Failed to get users" });
+    }
+  });
+
+  app.get("/api/admin/users/:user_id", async (req, res) => {
+    try {
+      const { user_id } = req.params;
+      const session = req.query.session || req.cookies.auth_session;
+      
+      let url = `${BACKEND_URL}/api/admin/users/${user_id}`;
+      if (session) {
+        url += `?session=${session}`;
+      }
+      
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Backend responded with status ${response.status}`);
+      }
+      const data = await response.json();
+      res.json(data);
+    } catch (error) {
+      console.error("Admin user detail error:", error);
+      res.status(500).json({ error: "Failed to get user details" });
+    }
+  });
+
+  app.get("/api/admin/stats", async (req, res) => {
+    try {
+      const session = req.query.session || req.cookies.auth_session;
+      
+      let url = `${BACKEND_URL}/api/admin/stats`;
+      if (session) {
+        url += `?session=${session}`;
+      }
+      
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`Backend responded with status ${response.status}`);
+      }
+      const data = await response.json();
+      res.json(data);
+    } catch (error) {
+      console.error("Admin stats error:", error);
+      res.status(500).json({ error: "Failed to get admin stats" });
+    }
+  });
+
   // Hand Processing Routes - Proxy to Backend
   app.post("/hand/process", upload.single('file'), async (req, res) => {
     try {
@@ -93,8 +160,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         formData.append(key, req.body[key]);
       });
 
+      // Forward session from query params or cookies to backend
+      const session = req.query.session || req.cookies.auth_session;
+      const headers: HeadersInit = {};
+      if (session) {
+        headers['Cookie'] = `auth_session=${session}`;
+      }
+
       const response = await fetch(`${BACKEND_URL}/hand/process`, {
         method: 'POST',
+        headers,
         body: formData as any,
       });
 
@@ -406,9 +481,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         formData.append('analysis_detail_level', req.body.analysis_detail_level);
       }
 
+      // Forward session from query params or cookies to backend
+      const session = req.query.session || req.cookies.auth_session;
+      const headers: HeadersInit = { "Content-Type": "application/x-www-form-urlencoded" };
+      if (session) {
+        headers['Cookie'] = `auth_session=${session}`;
+      }
+
       const response = await fetch(`${BACKEND_URL}/ai/analyze_existing/${job_id}`, {
         method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        headers,
         body: formData
       });
       const data = await response.json();
@@ -423,9 +505,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/ai/reanalyze/:job_id", async (req, res) => {
     try {
       const { job_id } = req.params;
+      
+      // Forward session from query params or cookies to backend
+      const session = req.query.session || req.cookies.auth_session;
+      const headers: HeadersInit = { "Content-Type": "application/json" };
+      if (session) {
+        headers['Cookie'] = `auth_session=${session}`;
+      }
+      
       const response = await fetch(`${BACKEND_URL}/ai/reanalyze/${job_id}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify(req.body)
       });
       const data = await response.json();
@@ -441,7 +531,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get all jobs - proxy to backend Python server
   app.get("/jobs", async (req, res) => {
     try {
-      const response = await fetch(`${BACKEND_URL}/jobs`);
+      // Forward session from query params or cookies
+      const session = req.query.session || req.cookies.auth_session;
+      const url = session 
+        ? `${BACKEND_URL}/jobs?session=${session}`
+        : `${BACKEND_URL}/jobs`;
+      
+      const response = await fetch(url);
       if (!response.ok) {
         throw new Error(`Backend responded with status ${response.status}`);
       }
@@ -469,7 +565,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/jobs/:id", async (req, res) => {
     try {
       const { id } = req.params;
-      const response = await fetch(`${BACKEND_URL}/jobs/${id}`, {
+      // Forward session from query params or cookies
+      const session = req.query.session || req.cookies.auth_session;
+      const url = session 
+        ? `${BACKEND_URL}/jobs/${id}?session=${session}`
+        : `${BACKEND_URL}/jobs/${id}`;
+      
+      const response = await fetch(url, {
         method: 'DELETE'
       });
       
@@ -489,19 +591,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Clear all jobs - proxy to backend Python server
   app.delete("/jobs", async (req, res) => {
     try {
-      // For now, we'll implement this by deleting jobs individually
-      // since the backend doesn't have a clear all endpoint
-      const jobsResponse = await fetch(`${BACKEND_URL}/jobs`);
+      // Forward session from query params or cookies
+      const session = req.query.session || req.cookies.auth_session;
+      
+      // Fetch user's jobs with session
+      const jobsUrl = session 
+        ? `${BACKEND_URL}/jobs?session=${session}`
+        : `${BACKEND_URL}/jobs`;
+      
+      const jobsResponse = await fetch(jobsUrl);
       if (!jobsResponse.ok) {
         throw new Error(`Backend responded with status ${jobsResponse.status}`);
       }
       const jobsData = await jobsResponse.json();
       const jobs = jobsData.jobs || [];
       
-      // Delete each job individually
+      // Delete each job individually with session
       for (const job of jobs) {
         try {
-          await fetch(`${BACKEND_URL}/jobs/${job.job_id}`, {
+          const deleteUrl = session 
+            ? `${BACKEND_URL}/jobs/${job.job_id}?session=${session}`
+            : `${BACKEND_URL}/jobs/${job.job_id}`;
+          
+          await fetch(deleteUrl, {
             method: 'DELETE'
           });
         } catch (error) {
