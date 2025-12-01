@@ -26,7 +26,6 @@ router = APIRouter(prefix="/hand", tags=["Hand Processing"])
 @router.post("/process", response_model=ProcessingResponse)
 async def process_video_hand_tracking(
     background_tasks: BackgroundTasks,
-    request: Request,
     file: UploadFile = File(...),
     target_hand: TargetHand = Form(TargetHand.RIGHT),
     confidence_threshold: float = Form(0.7, ge=0.1, le=1.0),
@@ -39,7 +38,8 @@ async def process_video_hand_tracking(
     include_movement_analysis: bool = Form(True),
     analysis_detail_level: str = Form("standard"),
     hand_service: HandService = Depends(get_hand_service),
-    job_manager: JobManager = Depends(get_job_manager)
+    job_manager: JobManager = Depends(get_job_manager),
+    current_user: Optional[dict] = Depends(get_current_user_optional)
 ):
     """
     Process video for hand tracking with MANO-style landmarks and optional AI analysis.
@@ -57,8 +57,7 @@ async def process_video_hand_tracking(
     - **analysis_detail_level**: Level of analysis detail (basic/standard/detailed)
     """
     try:
-        # Get current user
-        current_user = await get_current_user_optional(request)
+        # Get user_id from dependency-injected current_user
         user_id = current_user["id"] if current_user else None
         
         # Validate file type
@@ -311,16 +310,15 @@ async def download_robot_commands(
 async def reprocess_video(
     job_id: str,
     background_tasks: BackgroundTasks,
-    request: Request,
     target_hand: Optional[TargetHand] = Form(None),
     confidence_threshold: Optional[float] = Form(None, ge=0.1, le=1.0),
     hand_service: HandService = Depends(get_hand_service),
-    job_manager: JobManager = Depends(get_job_manager)
+    job_manager: JobManager = Depends(get_job_manager),
+    current_user: Optional[dict] = Depends(get_current_user_optional)
 ):
     """Reprocess an existing video with different parameters."""
     try:
-        # Get current user
-        current_user = await get_current_user_optional(request)
+        # Get user_id from dependency-injected current_user
         user_id = current_user["id"] if current_user else None
         
         job = job_manager.get_job(job_id)
