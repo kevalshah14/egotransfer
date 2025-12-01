@@ -23,17 +23,16 @@ router = APIRouter(prefix="/ai", tags=["AI Processing"])
 async def analyze_existing_video(
     job_id: str,
     background_tasks: BackgroundTasks,
-    request: Request,
     include_task_analysis: bool = Form(True),
     include_movement_analysis: bool = Form(True),
     analysis_detail_level: str = Form("standard"),
     ai_service: AIService = Depends(get_ai_service),
-    job_manager: JobManager = Depends(get_job_manager)
+    job_manager: JobManager = Depends(get_job_manager),
+    current_user: Optional[dict] = Depends(get_current_user_optional)
 ):
     """Analyze an existing processed video with AI."""
     try:
-        # Get current user
-        current_user = await get_current_user_optional(request)
+        # Get user_id from dependency-injected current_user
         user_id = current_user["id"] if current_user else None
         
         # Get the existing job
@@ -85,13 +84,13 @@ async def analyze_existing_video(
 @router.post("/analyze", response_model=ProcessingResponse)
 async def analyze_video_with_ai(
     background_tasks: BackgroundTasks,
-    request: Request,
     file: UploadFile = File(...),
     include_task_analysis: bool = Form(True),
     include_movement_analysis: bool = Form(True),
     analysis_detail_level: str = Form("standard"),  # basic, standard, detailed
     ai_service: AIService = Depends(get_ai_service),
-    job_manager: JobManager = Depends(get_job_manager)
+    job_manager: JobManager = Depends(get_job_manager),
+    current_user: Optional[dict] = Depends(get_current_user_optional)
 ):
     """
     Analyze video with AI for task understanding and movement insights.
@@ -102,8 +101,7 @@ async def analyze_video_with_ai(
     - **analysis_detail_level**: Level of analysis detail (basic/standard/detailed)
     """
     try:
-        # Get current user
-        current_user = await get_current_user_optional(request)
+        # Get user_id from dependency-injected current_user
         user_id = current_user["id"] if current_user else None
         
         # Validate file type
@@ -181,14 +179,13 @@ async def analyze_video_with_ai(
 @router.get("/analysis/{job_id}", response_model=AIAnalysisResult)
 async def get_analysis_result(
     job_id: str,
-    request: Request,
     ai_service: AIService = Depends(get_ai_service),
-    job_manager: JobManager = Depends(get_job_manager)
+    job_manager: JobManager = Depends(get_job_manager),
+    current_user: Optional[dict] = Depends(get_current_user_optional)
 ):
     """Get AI analysis results for a specific job."""
     try:
-        # Get current user
-        current_user = await get_current_user_optional(request)
+        # Get user_id from dependency-injected current_user
         user_id = current_user["id"] if current_user else None
         
         job = job_manager.get_job(job_id)
@@ -238,15 +235,14 @@ async def get_available_ai_models(ai_service: AIService = Depends(get_ai_service
 async def reanalyze_video(
     job_id: str,
     background_tasks: BackgroundTasks,
-    request: Request,
     analysis_detail_level: str = Form("standard"),
     ai_service: AIService = Depends(get_ai_service),
-    job_manager: JobManager = Depends(get_job_manager)
+    job_manager: JobManager = Depends(get_job_manager),
+    current_user: Optional[dict] = Depends(get_current_user_optional)
 ):
     """Re-analyze an existing video with different parameters."""
     try:
-        # Get current user
-        current_user = await get_current_user_optional(request)
+        # Get user_id from dependency-injected current_user
         user_id = current_user["id"] if current_user else None
         
         job = job_manager.get_job(job_id)
